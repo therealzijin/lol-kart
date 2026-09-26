@@ -37,3 +37,25 @@ export function engine(speed,drifting,active){
   screech.gain.setTargetAtTime(active&&drifting&&!muted?.035:0,t,.05);
 }
 export function stopEngine(){ if(engGain&&ac){ engGain.gain.setTargetAtTime(0,ac.currentTime,.05); screech.gain.setTargetAtTime(0,ac.currentTime,.05); } }
+
+/* ---------- 英雄語音（中文介面＝英文原音、日文介面＝日配）：voice/{en|ja}/{英雄}/{類別}{n}.m4a ---------- */
+// 類別：move 移動｜first 起跑｜attack 攻擊｜q / r 技能施放｜kill 打中人｜death 被打中｜laugh 笑｜taunt 嘲諷｜recall 回城
+const VO_FB={first:['move'],q:['attack'],r:['attack','taunt'],kill:['laugh','taunt','attack'],death:['move'],taunt:['laugh','kill','attack'],laugh:['taunt','kill'],recall:['laugh','move'],attack:['move'],move:[]};
+const vIdx={}, vRaw={}, vLast={}; let vBusy=0;
+const vlang=()=>voiceLang()==='ja'?'ja':'en';
+let voiceLang=()=>'zh'; export function setVoiceLang(f){ voiceLang=f; }
+const vIndex=L=>vIdx[L]||(vIdx[L]=fetch(`voice/${L}/index.json`).then(r=>r.json()).catch(()=>({})));
+function vCat(ent,cat){ if(!ent) return null; if(ent[cat]) return cat; for(const c of VO_FB[cat]||[]) if(ent[c]) return c; return null; }
+function vFetch(p){ if(!vRaw[p]) vRaw[p]=fetch(`voice/${p}.m4a`).then(r=>{ if(!r.ok) throw 0; return r.arrayBuffer(); }).catch(()=>{ delete vRaw[p]; return null; }); return vRaw[p]; }
+// 比賽開始前把會說話的英雄（真人玩家）的台詞先下載（每位約 30 句、300 KB）
+export async function preloadVoices(cids){ const L=vlang(), idx=await vIndex(L); cids.forEach(c=>{ const e=idx[c]||{}; Object.keys(e).forEach(k=>{ for(let i=0;i<e[k];i++) vFetch(`${L}/${c}/${k}${i}`); }); }); }
+// 說一句：一次只說一句，前一句沒講完就排隊；賽車節奏快，等超過 1.2 秒就不說了
+export async function voice(cid,cat){
+  const a=ctx(); if(!a||muted) return; const L=vlang(), ent=(await vIndex(L))[cid], c=vCat(ent,cat); if(!c) return;
+  const n=ent[c], key=cid+c; let i=Math.floor(Math.random()*n); if(n>1&&i===vLast[key]) i=(i+1)%n; vLast[key]=i;
+  const raw=await vFetch(`${L}/${cid}/${c}${i}`); if(!raw) return;
+  const buf=await new Promise((ok,no)=>a.decodeAudioData(raw.slice(0),ok,no)).catch(()=>null); if(!buf) return;
+  const now=a.currentTime, at=Math.max(now,vBusy); if(at-now>1.2) return; vBusy=at+buf.duration+.1;
+  const src=a.createBufferSource(), g=a.createGain(); g.gain.value=1.25; src.buffer=buf; src.connect(g).connect(a.destination); src.start(at);
+}
+
