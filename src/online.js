@@ -1,18 +1,20 @@
 // 兩支手機對戰：大廳、開賽同步、狀態同步（每秒 20 次）、技能重播、斷線處理。
-// 分工：每支手機負責自己的車；房主另外負責電腦。對方的車用收到的狀態做 110ms 延遲內插。
-import {Net} from './net.js';
-import {T,lang} from './i18n.js';
-import {ROSTER,byId,modelUrl,circleUrl} from './roster.js';
-import {cast,remoteHit} from './skills.js';
-import {initAI} from './ai.js';
+// 分工：每支手機負責自己的車；房主另外負責電腦。
+// 對方的車：用「最後收到的狀態＋速度×(經過時間＋單程延遲)」推算它現在在哪，再平滑靠過去（不再顯示過去的位置）。
+import {Net} from './net.js?v=20260926173616';
+import {T,lang} from './i18n.js?v=20260926173616';
+import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260926173616';
+import {cast,remoteHit} from './skills.js?v=20260926173616';
+import {initAI} from './ai.js?v=20260926173616';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-const DELAY=110, SEND_EVERY=3;          // 內插延遲（ms）、每幾個模擬步送一次（60/3 = 20Hz）
+const SEND_EVERY=2;                     // 每幾個模擬步送一次（60/2 = 30Hz）
 const F=['x','z','y','vy','heading','speed','vx','vz','drift','level','driftT','lap','s','half','fin','ft','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','steer','offroad','trailT','lightSlowT','bumpT'];
 
 let net=null, G=null, me=-1, cpuN=2, opp=null, state='idle', readySelf=false, readyOpp=false, pendingStart=null, lastCfg=null;
-const buf={};                            // idx → [{t, d}]
+const rem={};                            // idx → {L:最新狀態, tr:收到時間, st:對方送出時間, angV:轉向速度}
+let lastN=0, sendN=0;
 
 /* ---------- 狀態打包／套用 ---------- */
 const r3=v=>Math.round(v*1000)/1000;
@@ -21,18 +23,20 @@ function pack(k){ return [k.idx,r3(k.pos.x),r3(k.pos.z),r3(k.y),r3(k.vy),r3(k.he
 function unpack(a){ const o={}; F.forEach((f,i)=>o[f]=a[i+1]); return o; }
 const lerpA=(a,b,u)=>{ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*u; };
 export function applyRemote(race,k){
-  const B=buf[k.idx]; if(!B||!B.length) return;
-  const now=performance.now()-DELAY; let a=null,b=null;
-  for(const e of B){ if(e.t<=now) a=e; else { b=e; break; } }
-  const L=B[B.length-1].d; let x,z,h,y;
-  if(a&&b){ const u=(now-a.t)/Math.max(1,b.t-a.t); x=a.d.x+(b.d.x-a.d.x)*u; z=a.d.z+(b.d.z-a.d.z)*u; y=a.d.y+(b.d.y-a.d.y)*u; h=lerpA(a.d.heading,b.d.heading,u); }
-  else { const e=a||B[0], dt=Math.min(.25,Math.max(0,(now-e.t)/1000)); x=e.d.x+e.d.vx*dt; z=e.d.z+e.d.vz*dt; y=e.d.y; h=e.d.heading; }   // 封包晚到：用速度往前推一點
-  k.pos.set(x,0,z); k.y=y; k.heading=h; k.vel.set(L.vx,0,L.vz); k.speed=L.speed; k.vy=L.vy;
+  const R=rem[k.idx]; if(!R||!R.L) return; const L=R.L;
+  const owd=(net?net.rtt:60)/2, age=Math.min(.35,Math.max(0,(performance.now()-R.tr+owd)/1000));
+  const tx=L.x+L.vx*age, tz=L.z+L.vz*age, th=L.heading+(R.angV||0)*Math.min(age,.15);
+  // 只平滑「修正量」：車照預測的軌跡走，新封包造成的落差 off 再慢慢歸零（不會因為平滑而一直落後）
+  if(!R.init||Math.hypot(tx-k.pos.x,tz-k.pos.z)>8){ R.ox=R.oz=R.oh=0; R.init=true; }                     // 差太多（被拉回、傳送）就直接跳過去
+  else if(R.fresh){ R.ox=k.pos.x-tx; R.oz=k.pos.z-tz; let dh=k.heading-th; R.oh=Math.atan2(Math.sin(dh),Math.cos(dh)); }
+  R.fresh=false; const d=Math.exp(-(1/60)*10); R.ox*=d; R.oz*=d; R.oh*=d;
+  k.pos.set(tx+R.ox,0,tz+R.oz); k.heading=th+R.oh;
+  k.y=(L.y>0||L.vy>0)?Math.max(0,L.y+L.vy*age-12*age*age):0;
+  k.vel.set(L.vx,0,L.vz); k.speed=L.speed; k.vy=L.vy;
   ['drift','level','driftT','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','trailT','lightSlowT','bumpT'].forEach(f=>k[f]=L[f]);
   k.offroad=!!L.offroad; k.input.steer=L.steer; k.lap=L.lap; k.s=L.s; k.half=!!L.half;
   const q=race.track.nearest(k.pos,k.lastI); k.lastI=q.i; k.calcProgress(race.track);
   if(L.fin&&!k.finished) race.markFinished(k,L.ft);
-  while(B.length>2&&B[1].t<now-400) B.shift();
 }
 
 /* ---------- 大廳畫面 ---------- */
@@ -62,7 +66,7 @@ function makeConfig(){
   return {entrants:list,seed:Math.floor(Math.random()*1e9)};
 }
 function beginFromConfig(cfg){
-  lastCfg=cfg; readySelf=false; readyOpp=false; Object.keys(buf).forEach(k=>delete buf[k]);
+  lastCfg=cfg; readySelf=false; readyOpp=false; Object.keys(rem).forEach(k=>delete rem[k]); lastN=0;
   const mine=net.isHost?'host':'guest';
   const list=cfg.entrants.map(e=>Object.assign({},e,{local:e.side===mine}));
   me=list.findIndex(e=>e.human&&e.side===mine);
@@ -86,7 +90,11 @@ function wire(){
      .on('config',m=>{ if(!net.isHost) beginFromConfig(m.cfg); })
      .on('ready',()=>{ readyOpp=true; tryGo(); })
      .on('go',()=>{ if(!net.isHost){ if(readySelf) go(); else pendingStart=true; } })
-     .on('snap',m=>{ const t=performance.now(); for(const a of m.k){ const B=buf[a[0]]||(buf[a[0]]=[]); B.push({t,d:unpack(a)}); if(B.length>40) B.shift(); } })
+     .on('snap',m=>{ if(m.n!=null){ if(m.n<=lastN) return; lastN=m.n; }            // 晚到的舊封包丟掉
+        const t=performance.now();
+        for(const a of m.k){ const d=unpack(a), R=rem[a[0]]||(rem[a[0]]={});
+          if(R.L&&m.st&&R.st){ const dt=(m.st-R.st)/1000; if(dt>.005){ let dh=d.heading-R.L.heading; dh=Math.atan2(Math.sin(dh),Math.cos(dh)); R.angV=Math.max(-14,Math.min(14,dh/dt)); } }
+          R.L=d; R.tr=t; R.st=m.st; R.fresh=true; } })
      .on('cast',m=>{ const race=G.race(); if(!race) return; const k=race.karts[m.k]; if(k&&!k.local) cast(race,k,m.slot,m); })
      .on('hit',m=>{ const race=G.race(); if(race) remoteHit(race,m); })
      .on('bye',()=>lost())
@@ -128,6 +136,6 @@ export function isHost(){ return !!(net&&net.isHost); }
 export function rematch(){ if(!net||!net.isHost||!opp) return false; const cfg=makeConfig(); net.send({t:'config',cfg}); beginFromConfig(cfg); return true; }
 // 每個模擬步呼叫；每 3 步送一次自己負責的車
 let stepN=0;
-export function tick(race){ if(!net||!net.open) return; if(++stepN%SEND_EVERY) return; net.send({t:'snap',k:race.karts.filter(k=>k.local).map(pack)}); }
+export function tick(race){ if(!net||!net.open) return; if(++stepN%SEND_EVERY) return; net.sendFast({t:'snap',n:++sendN,st:Math.round(performance.now()),k:race.karts.filter(k=>k.local).map(pack)}); }
 export function leave(silent){ if(net){ net.close(); } net=null; opp=null; state='idle'; if(!silent) showChoose(); }
 export function stateOf(){ return state; }

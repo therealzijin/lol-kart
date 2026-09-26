@@ -2,6 +2,10 @@
 let ac=null, eng=null, engGain=null, engFilter=null, noiseBuf=null, screech=null, muted=false;
 function ctx(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==='suspended') ac.resume(); return ac; }
 export function unlockAudio(){ ctx(); }
+// 省電：不在比賽時讓音訊晶片休眠；比賽中任何觸控都會喚醒（iPhone 需要觸控才能恢復）
+export function suspendAudio(){ if(ac&&ac.state==='running'){ try{ ac.suspend(); }catch(e){} } }
+document.addEventListener('touchstart',()=>{ if(ac&&ac.state==='suspended'&&document.body.classList.contains('racing')) ac.resume(); },{passive:true});
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) suspendAudio(); });
 function tone(f,t0,dur,type='sine',vol=.15,f2){ const a=ctx(); if(!a||muted) return; const o=a.createOscillator(), g=a.createGain(), t=a.currentTime+t0;
   o.type=type; o.frequency.setValueAtTime(f,t); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+dur);
   g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+dur); o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.05); }

@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js';
-import {Track,TRACK_DEF} from './track.js';
-import {Race,DT} from './race.js';
-import {View} from './view.js';
-import {initInput,pollInput} from './input.js';
-import {sfx,engine,stopEngine,unlockAudio} from './audio.js';
-import {initAI,driveAI} from './ai.js';
-import {KITS,cast} from './skills.js';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926173616';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926173616';
+import {Track,TRACK_DEF} from './track.js?v=20260926173616';
+import {Race,DT} from './race.js?v=20260926173616';
+import {View} from './view.js?v=20260926173616';
+import {initInput,pollInput} from './input.js?v=20260926173616';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio} from './audio.js?v=20260926173616';
+import {initAI,driveAI} from './ai.js?v=20260926173616';
+import {KITS,cast} from './skills.js?v=20260926173616';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -47,7 +47,7 @@ function renderKit(){ const c=byId(pick.champ), k=c.kit, sp=spellCache[c.id];
   $('kit').innerHTML=row(null,T('passive'),k.p[lang])+row('q',T('skill'),k.q[lang])+row('r',T('ult'),k.r[lang]); }
 
 /* ---------- 比賽 ---------- */
-let view=null, track=null, race=null, me=0, acc=0, lastT=0, raf=0, bannerT=0, mode='solo', running=false, noticeT=0;
+let quality=ls.get('lk-q')||'std', lastDraw=0, rdt=0, hudT=0, miniT=0, view=null, track=null, race=null, me=0, acc=0, lastT=0, raf=0, bannerT=0, mode='solo', running=false, noticeT=0;
 function myName(){ return $('name').value.trim()||T('namePh').replace(/^.*：/,''); }
 function myEntry(){ return {name:myName(),champ:pick.champ,skin:pick.skin||String(byId(pick.champ).key*1000)}; }
 function entrantsSolo(){
@@ -63,7 +63,7 @@ function entrantsSolo(){
 async function startRace(list,opts){
   unlockAudio(); tryLandscape(); cancelAnimationFrame(raf); running=false; stopEngine();
   mode=opts.online?'online':'solo'; me=opts.me||0;
-  if(!view) view=new View($('game'));
+  if(!view){ view=new View($('game')); view.setQuality(quality); }
   if(!track) track=new Track(TRACK_DEF);
   show('s-load'); $('load-t').textContent=T('loadModels'); $('load-s').textContent=T('loadHint'); $('load-bar').style.width='0%';
   const urls=[...new Set(list.map(e=>e.url))];
@@ -89,8 +89,8 @@ setInterval(()=>{ if(running&&document.hidden){ simulate(performance.now()); run
 function loop(now){
   raf=requestAnimationFrame(loop);
   const dt=simulate(now); runSteps(); flushEvents(false);
-  view.render(Math.min(.1,dt),now/1000);
-  hud(dt);
+  rdt+=dt; if(now-lastDraw<(quality==='eco'?1000/31:1000/61)) return; lastDraw=now;   // 最多每秒 60 張（省電 30 張），高更新率螢幕也不會多畫；模擬照常 60 次
+  view.render(Math.min(.1,rdt),now/1000); hud(rdt); rdt=0;
   const k=race.karts[me]; engine(k.speed,!!k.drift,race.phase!=='done');
 }
 function runSteps(){
@@ -125,20 +125,24 @@ function flushEvents(hidden){
 function center(t){ const e=$('h-center'); e.textContent=t; e.classList.remove('pop'); void e.offsetWidth; if(t!=='') e.classList.add('pop'); }
 function banner(t,sec){ $('h-banner').textContent=t; bannerT=sec||2.2; }
 const fmt=s=>{ if(s==null) return '--'; const m=Math.floor(s/60), r=s-m*60; return `${m}:${r.toFixed(2).padStart(5,'0')}`; };
+// 畫面文字：數值有變才改 DOM，而且每秒最多 10 次（每幀改 DOM 很耗電）
+const setTxt=(id,v,html)=>{ const e=$(id); if(e._v!==v){ e._v=v; if(html) e.innerHTML=v; else e.textContent=v; } };
 function hud(dt){
   const k=race.karts[me], suf=['st','nd','rd','th','th','th'];
-  $('h-pos').innerHTML=`${k.rank}<small>${lang==='ja'?'位':suf[k.rank-1]} / ${race.karts.length}</small>`;
-  $('h-lap').textContent=T('lap',{l:Math.max(1,Math.min(race.laps,k.lap)),n:race.laps});
-  $('h-time').textContent=fmt(k.finished?k.finishTime:race.time);
-  $('h-spd').textContent=Math.round(k.speed*3.6)+' km/h';
+  hudT+=dt; miniT+=dt;
+  if(hudT>=.1){ hudT=0;
+    setTxt('h-pos',`${k.rank}<small>${lang==='ja'?'位':suf[k.rank-1]} / ${race.karts.length}</small>`,true);
+    setTxt('h-lap',T('lap',{l:Math.max(1,Math.min(race.laps,k.lap)),n:race.laps}));
+    setTxt('h-time',fmt(k.finished?k.finishTime:race.time));
+    setTxt('h-spd',Math.round(k.speed*3.6)+' km/h'); }
   if(bannerT>0){ bannerT-=dt; if(bannerT<=0) $('h-banner').textContent=''; }
   const kit=KITS[k.champ];
-  $('b-q').querySelector('.cd').style.transform=`scaleY(${Math.min(1,k.qCD/kit.q.cd).toFixed(3)})`;
-  $('b-r').querySelector('.cd').style.transform=`scaleY(${(1-k.rCharge/100).toFixed(3)})`;
+  const qs=Math.min(1,k.qCD/kit.q.cd).toFixed(2), rs=(1-k.rCharge/100).toFixed(2), bo=Math.min(1,k.blindT/.6).toFixed(2), wn=k.warnT>0?'':'none';
+  const Q=$('b-q').querySelector('.cd'), Rr=$('b-r').querySelector('.cd');
+  if(Q._v!==qs){ Q._v=qs; Q.style.transform=`scaleY(${qs})`; } if(Rr._v!==rs){ Rr._v=rs; Rr.style.transform=`scaleY(${rs})`; }
   $('b-q').classList.toggle('ready',k.qCD<=0); $('b-r').classList.toggle('ready',k.rCharge>=100);
-  $('blind').style.opacity=Math.min(1,k.blindT/.6).toFixed(2);
-  $('h-warn').style.display=k.warnT>0?'':'none';
-  drawMini();
+  const bl=$('blind'); if(bl._v!==bo){ bl._v=bo; bl.style.opacity=bo; } const w=$('h-warn'); if(w._v!==wn){ w._v=wn; w.style.display=wn; }
+  if(miniT>=1/15){ miniT=0; drawMini(); }
 }
 /* ---------- 小地圖 ---------- */
 let mini=null;
@@ -155,7 +159,7 @@ function drawMini(){
 }
 /* ---------- 結果 ---------- */
 function showResults(){
-  stopEngine(); running=false; Online.setResults();
+  stopEngine(); running=false; Online.setResults(); cancelAnimationFrame(raf); setTimeout(suspendAudio,2500);   // 結果畫面不用再繪圖
   const online=mode==='online'&&Online.isOnline(), host=Online.isHost();
   const rows=race.results().map(r=>`<tr class="${r.idx===me?'me':''}"><td class="n">${r.rank}</td><td><img src="${circleUrl(r.skin)}" alt="">${esc(r.name)}</td><td class="t">${r.time!=null?fmt(r.time):`<span style="opacity:.5">${T('dnf')}</span>`}</td></tr>`).join('');
   const again=!online||host?`<button class="big go" id="r-again">${T('again')}</button>`:`<p class="note" style="color:#6B5F58;opacity:1;text-align:center">${T('hostWillRestart')}</p>`;
@@ -165,13 +169,13 @@ function showResults(){
   $('r-home').onclick=()=>{ if(mode==='online') Online.leave(true); toTitle(); };
 }
 function stopRace(){ cancelAnimationFrame(raf); running=false; stopEngine(); $('hud').classList.remove('on'); $('pad').classList.remove('on'); document.body.classList.remove('racing'); }
-function toTitle(){ stopRace(); show('s-title'); renderRoster(); }
+function toTitle(){ stopRace(); suspendAudio(); show('s-title'); renderRoster(); }
 function tryLandscape(){ try{ if(matchMedia('(pointer:coarse)').matches){ document.documentElement.requestFullscreen?.().then(()=>screen.orientation?.lock?.('landscape')).catch(()=>{}); } }catch(e){} }
 const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidth);
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js';
+import * as Online from './online.js?v=20260926173616';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },
@@ -188,6 +192,8 @@ Online.initOnline({
 $('name').value=ls.get('lk-name')||'';
 document.querySelectorAll('#seg-lang button').forEach(b=>b.onclick=()=>setLang(b.dataset.v));
 onLang(()=>{ $('name').placeholder=T('namePh'); $('o-code').placeholder=T('codePh'); if(document.getElementById('s-title').classList.contains('on')) renderRoster(); });
+document.querySelectorAll('#seg-q button').forEach(b=>b.onclick=()=>{ quality=b.dataset.v; ls.set('lk-q',quality); if(view) view.setQuality(quality); document.querySelectorAll('#seg-q button').forEach(x=>x.classList.toggle('sel',x===b)); });
+document.querySelectorAll('#seg-q button').forEach(x=>x.classList.toggle('sel',x.dataset.v===quality));
 $('b-solo').onclick=()=>{ $('t-err').textContent=''; startRace(entrantsSolo(),{me:0}); };
 $('b-online').onclick=()=>{ $('t-err').textContent=''; show('s-online'); Online.openOnline(); };
 initInput(); applyLang();

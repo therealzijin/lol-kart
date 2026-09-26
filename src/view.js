@@ -4,8 +4,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import {byId,ROSTER} from './roster.js';
-import {K} from './kart.js';
+import {byId,ROSTER} from './roster.js?v=20260926173616';
+import {K} from './kart.js?v=20260926173616';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -51,8 +51,8 @@ class Particles{
 export class View{
   constructor(el){
     const r=this.r=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-    r.setPixelRatio(Math.min(devicePixelRatio||1,1.75)); el.appendChild(r.domElement);
-    const s=this.scene=new THREE.Scene(); s.background=new THREE.Color(0x9ED3F0); s.fog=new THREE.Fog(0x9ED3F0,70,300);
+    this.pd=1; r.setPixelRatio(Math.min(devicePixelRatio||1,1.5)); el.appendChild(r.domElement);
+    const s=this.scene=new THREE.Scene(); s.background=new THREE.Color(0xCFEBFA); s.fog=new THREE.Fog(0xCFEBFA,80,320);
     s.add(new THREE.HemisphereLight(0xEAF6FF,0x3E6B34,2.2));
     const sun=new THREE.DirectionalLight(0xFFF1D6,2.6); sun.position.set(80,140,40); s.add(sun);
     this.cam=new THREE.PerspectiveCamera(62,1,.1,700);
@@ -65,6 +65,8 @@ export class View{
     const fit=()=>{ const w=el.clientWidth||innerWidth, h=el.clientHeight||innerHeight; r.setSize(w,h,false); this.cam.aspect=w/h; this.cam.updateProjectionMatrix(); };
     addEventListener('resize',fit); fit(); this.fit=fit;
   }
+  // 畫質：std＝1.5 倍解析度；eco（省電）＝1 倍解析度、粒子減半
+  setQuality(q){ this.q=q; this.pd=q==='eco'?.5:1; this.r.setPixelRatio(q==='eco'?1:Math.min(devicePixelRatio||1,1.5)); this.fit(); }
   // 下載英雄模型（onProgress 回報 0～1）。失敗的會用替身。
   loadModels(urls,onProgress){
     const prog={}; const report=()=>{ const v=Object.values(prog); onProgress&&onProgress(v.length?v.reduce((a,b)=>a+b,0)/urls.length:1); };
@@ -218,13 +220,15 @@ export class View{
       this.status(R,dt);
       // 粒子
       const f=new THREE.Vector3(Math.sin(g.rotation.y),0,Math.cos(g.rotation.y)), rt=new THREE.Vector3(f.z,0,-f.x), back=g.position.clone().addScaledVector(f,-.9);
-      if(k.drift&&k.driftT>.12){ const c=SPARK[k.level]; for(const s of [-1,1]) if(Math.random()<.7){ const p=back.clone().addScaledVector(rt,s*.32); p.y=.12; this.sparks.emit(p,new THREE.Vector3(rt.x*s*1.5+(Math.random()-.5),1.2+Math.random()*1.5,rt.z*s*1.5+(Math.random()-.5)).addScaledVector(f,-2),c,.3,7); } }
-      if(k.boostT>0) for(const s of [-.22,.22]){ const p=back.clone().addScaledVector(rt,s); p.y=g.position.y; this.sparks.emit(p,f.clone().multiplyScalar(-4+Math.random()).add(new THREE.Vector3((Math.random()-.5)*.6,(Math.random()-.5)*.6,(Math.random()-.5)*.6)),Math.random()<.5?0xFFB53A:0xFF6A2A,.28,0); }
-      else if(Math.random()<.35) for(const s of [-.22,.22]){ const p=back.clone().addScaledVector(rt,s); p.y=g.position.y; this.sparks.emit(p,f.clone().multiplyScalar(-2),R.col.getHex(),.18,0); }
-      if(k.offroad&&k.speed>6&&Math.random()<.6){ const p=back.clone(); p.y=.2; this.puffs.emit(p,new THREE.Vector3((Math.random()-.5)*2,1+Math.random(),(Math.random()-.5)*2),0x5A6B35,.6,0); }
+      const far=g.position.distanceToSquared(this.cam.position)>70*70, pd=far?0:this.pd;   // 遠處的人不產生粒子
+      if(k.drift&&k.driftT>.12){ const c=SPARK[k.level]; for(const s of [-1,1]) if(Math.random()<.7*pd){ const p=back.clone().addScaledVector(rt,s*.32); p.y=.12; this.sparks.emit(p,new THREE.Vector3(rt.x*s*1.5+(Math.random()-.5),1.2+Math.random()*1.5,rt.z*s*1.5+(Math.random()-.5)).addScaledVector(f,-2),c,.3,7); } }
+      if(k.boostT>0){ if(Math.random()<pd) for(const s of [-.22,.22]){ const p=back.clone().addScaledVector(rt,s); p.y=g.position.y; this.sparks.emit(p,f.clone().multiplyScalar(-4+Math.random()).add(new THREE.Vector3((Math.random()-.5)*.6,(Math.random()-.5)*.6,(Math.random()-.5)*.6)),Math.random()<.5?0xFFB53A:0xFF6A2A,.28,0); } }
+      else if(Math.random()<.35*pd) for(const s of [-.22,.22]){ const p=back.clone().addScaledVector(rt,s); p.y=g.position.y; this.sparks.emit(p,f.clone().multiplyScalar(-2),R.col.getHex(),.18,0); }
+      if(k.offroad&&k.speed>6&&Math.random()<.6*pd){ const p=back.clone(); p.y=.2; this.puffs.emit(p,new THREE.Vector3((Math.random()-.5)*2,1+Math.random(),(Math.random()-.5)*2),0x5A6B35,.6,0); }
       if(R.tag) R.tag.visible=g.position.distanceTo(this.cam.position)<60&&k.invisT<=0;
     });
     this.syncFx(race,dt,t); this.stepFlashes(dt);
+    if(TR.sky) TR.sky.position.copy(this.cam.position);
     this.sparks.update(dt); this.puffs.update(dt); TR.tick(t);
     // 鏡頭
     const R=this.riders[this.me], p=R.g.position, f=new THREE.Vector3(Math.sin(me.heading),0,Math.cos(me.heading));

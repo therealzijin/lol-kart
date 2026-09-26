@@ -56,7 +56,8 @@ export class Track{
     // 路面
     const road=canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#9A8C74'; g.fillRect(0,0,w,h);
       for(let y=0;y<h;y+=32) for(let x=((y/32)%2)*24;x<w;x+=48){ g.fillStyle=`hsl(35,${10+R()*10}%,${46+R()*10}%)`; g.fillRect(x+2,y+2,44,28); }
-      g.globalAlpha=.25; for(let k=0;k<900;k++){ g.fillStyle=R()<.5?'#5E5446':'#C9BCA2'; g.fillRect(R()*w,R()*h,2,2); } g.globalAlpha=1; },true);
+      g.globalAlpha=.25; for(let k=0;k<900;k++){ g.fillStyle=R()<.5?'#5E5446':'#C9BCA2'; g.fillRect(R()*w,R()*h,2,2); } g.globalAlpha=1;
+      g.fillStyle='rgba(244,238,220,.85)'; g.fillRect(6,0,5,h); g.fillRect(w-11,0,5,h); },true);
     const rp=[], ru=[], ri=[];
     for(let i=0;i<=N;i++){ const k=i%N, p=P[k], n=Nm[k], v=i*ds/8;
       rp.push(p.x-n.x*half,.03,p.z-n.z*half, p.x+n.x*half,.03,p.z+n.z*half); ru.push(0,v,1,v);
@@ -94,7 +95,8 @@ export class Track{
       const mesh=new THREE.Mesh(new THREE.PlaneGeometry(pd.w,pd.len),m); this.place(mesh,pd.s,pd.lat,.06); mesh.rotateX(-Math.PI/2); root.add(mesh); });
     // 河道（河上有橋）
     { const s=this.def.river*L, smp=this.sample(s), rw=18, span=this.w+2*off+70;
-      const water=new THREE.Mesh(new THREE.PlaneGeometry(span,rw),new THREE.MeshLambertMaterial({color:0x3FA7C9,transparent:true,opacity:.92}));
+      const wt=canvasTex(128,128,(g,w,h)=>{ g.fillStyle='#3FA7C9'; g.fillRect(0,0,w,h); g.strokeStyle='rgba(220,248,255,.55)'; g.lineWidth=3; for(let k=0;k<9;k++){ const y=R()*h, x=R()*w; g.beginPath(); g.moveTo(x,y); g.bezierCurveTo(x+14,y-6,x+28,y+6,x+44,y); g.stroke(); } },true); wt.repeat.set(span/14,rw/14);
+      const water=new THREE.Mesh(new THREE.PlaneGeometry(span,rw),new THREE.MeshLambertMaterial({map:wt,transparent:true,opacity:.95}));
       water.rotation.x=-Math.PI/2; water.position.set(smp.pos.x,.015,smp.pos.z); water.rotation.z=Math.atan2(smp.tan.x,smp.tan.z); root.add(water); this.water=water;
       [-1,1].forEach(side=>{ const rail=new THREE.Mesh(new THREE.BoxGeometry(.35,.9,rw+2),lam(0xC9A46B)); this.place(rail,s,side*(half+1.4),.45); root.add(rail); }); }
     // 巴龍巢穴、小龍巢穴
@@ -126,10 +128,40 @@ export class Track{
     inst(new THREE.CylinderGeometry(.35,.5,2.4,6),lam(0x6B4A2E),trees,(o,t)=>{ o.position.set(t[0],1.2*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
     inst(new THREE.ConeGeometry(2.6,4.6,7),lam(0x2F6B3A),trees,(o,t)=>{ o.position.set(t[0],(2.4+2)*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
     inst(new THREE.ConeGeometry(1.9,3.4,7),lam(0x3B8046),trees,(o,t)=>{ o.position.set(t[0],(2.4+3.9)*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3]+1,0); });
+    this.buildSky(root); this.buildDecor(root);
     inst(new THREE.SphereGeometry(1.4,7,5),lam(0x2E7A5C),bushes,(o,t)=>{ o.position.set(t[0],.5,t[1]); o.scale.set(t[2]*1.4,t[2],t[2]*1.4); o.rotation.set(0,0,0); });
+  }
+  // 天空（漸層圓頂，跟著鏡頭）與遠山剪影：各只有一個物體，幾乎不增加負擔
+  buildSky(root){
+    const R=rng(77), sky=new THREE.SphereGeometry(640,24,12), col=[], p=sky.attributes.position, c=new THREE.Color();
+    const top=new THREE.Color(0x4F9BE0), hor=new THREE.Color(0xCFEBFA), low=new THREE.Color(0xB8DDC4);
+    for(let i=0;i<p.count;i++){ const y=p.getY(i)/640; if(y>=0) c.copy(hor).lerp(top,Math.pow(y,.6)); else c.copy(hor).lerp(low,Math.min(1,-y*4)); col.push(c.r,c.g,c.b); }
+    sky.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    this.sky=new THREE.Mesh(sky,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide,fog:false,depthWrite:false})); this.sky.renderOrder=-1; root.add(this.sky);
+    // 遠山：一圈低多邊形山峰，合併成一個網格
+    const pos=[], cc=[], ring=46, C=this.center;
+    for(let k=0;k<ring;k++){ const a0=k/ring*Math.PI*2, a1=(k+1)/ring*Math.PI*2, am=(a0+a1)/2, r=430+R()*60, h=40+R()*70;
+      const P0=[C.x+Math.cos(a0)*r*1.05,-2,C.z+Math.sin(a0)*r*1.05], P1=[C.x+Math.cos(a1)*r*1.05,-2,C.z+Math.sin(a1)*r*1.05], Pt=[C.x+Math.cos(am)*r,h,C.z+Math.sin(am)*r];
+      pos.push(...P0,...Pt,...P1); const shade=.78+R()*.12; const base=new THREE.Color(0x6F93A8).multiplyScalar(shade), peak=new THREE.Color(0xE8F2F8);
+      cc.push(base.r,base.g,base.b, peak.r,peak.g,peak.b, base.r,base.g,base.b); }
+    const mg=new THREE.BufferGeometry(); mg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); mg.setAttribute('color',new THREE.Float32BufferAttribute(cc,3));
+    root.add(new THREE.Mesh(mg,new THREE.MeshBasicMaterial({vertexColors:true,fog:false,side:THREE.DoubleSide})));
+  }
+  // 岩石與小花：InstancedMesh（各一次繪圖）
+  buildDecor(root){
+    const R=rng(4242), half=this.half, off=this.off, rocks=[], flowers=[];
+    for(let i=0;i<this.N;i+=3){ const p=this.P[i], n=this.Nm[i];
+      if(R()<.35){ const side=R()<.5?-1:1, d=half+1.5+R()*(off-2.5); flowers.push([p.x+n.x*d*side,p.z+n.z*d*side,R()]); }
+      if(R()<.12){ const side=R()<.5?-1:1, d=half+off+2.5+R()*6; rocks.push([p.x+n.x*d*side,p.z+n.z*d*side,.6+R()*1.2,R()*6]); } }
+    const o=new THREE.Object3D();
+    const rm=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),new THREE.MeshLambertMaterial({color:0x8C8A84,flatShading:true}),rocks.length);
+    rocks.forEach((t,k)=>{ o.position.set(t[0],t[2]*.35,t[1]); o.scale.set(t[2]*1.3,t[2]*.8,t[2]); o.rotation.set(t[3],t[3]*2,0); o.updateMatrix(); rm.setMatrixAt(k,o.matrix); }); root.add(rm);
+    const fg=new THREE.PlaneGeometry(.5,.5); fg.rotateX(-Math.PI/2); fg.translate(0,.06,0);
+    const fm=new THREE.InstancedMesh(fg,new THREE.MeshLambertMaterial({color:0xffffff}),flowers.length), cols=[0xFFE27A,0xF7A1C4,0xFFFFFF,0xC39BF2], c=new THREE.Color();
+    flowers.forEach((t,k)=>{ o.position.set(t[0],0,t[1]); o.scale.setScalar(.7+t[2]*.6); o.rotation.set(0,t[2]*6,0); o.updateMatrix(); fm.setMatrixAt(k,o.matrix); fm.setColorAt(k,c.setHex(cols[Math.floor(t[2]*4)%4])); }); root.add(fm);
   }
   strip(pos,uv,idx,mat){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals(); return new THREE.Mesh(g,mat); }
   // 把物件放在賽道距離 s、橫向 lat 的位置，並朝向行進方向
   place(obj,s,lat,y){ const m=this.sample(s); obj.position.set(m.pos.x+m.nrm.x*lat,y,m.pos.z+m.nrm.z*lat); obj.rotation.set(0,Math.atan2(m.tan.x,m.tan.z),0); return obj; }
-  tick(t){ (this.spinners||[]).forEach((c,k)=>{ c.rotation.y=t*.8+k; }); if(this.water) this.water.material.opacity=.88+.05*Math.sin(t*2); this.padMats.forEach(m=>{ m.map.offset.y=-t*1.5; }); }
+  tick(t){ (this.spinners||[]).forEach((c,k)=>{ c.rotation.y=t*.8+k; }); if(this.water){ this.water.material.map.offset.x=t*.12; this.water.material.map.offset.y=Math.sin(t*.7)*.04; } this.padMats.forEach(m=>{ m.map.offset.y=-t*1.5; }); }
 }
