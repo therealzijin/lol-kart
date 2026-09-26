@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926175029';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926175029';
-import {Track,TRACK_DEF} from './track.js?v=20260926175029';
-import {Race,DT} from './race.js?v=20260926175029';
-import {View} from './view.js?v=20260926175029';
-import {initInput,pollInput} from './input.js?v=20260926175029';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio} from './audio.js?v=20260926175029';
-import {initAI,driveAI} from './ai.js?v=20260926175029';
-import {KITS,cast} from './skills.js?v=20260926175029';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926191638';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926191638';
+import {Track,TRACK_DEF} from './track.js?v=20260926191638';
+import {Race,DT} from './race.js?v=20260926191638';
+import {View} from './view.js?v=20260926191638';
+import {initInput,pollInput} from './input.js?v=20260926191638';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio} from './audio.js?v=20260926191638';
+import {initAI,driveAI} from './ai.js?v=20260926191638';
+import {KITS,cast} from './skills.js?v=20260926191638';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -175,7 +175,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260926175029';
+import * as Online from './online.js?v=20260926191638';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },

@@ -16,7 +16,7 @@ export class Kart{
     this.drift=0; this.driftT=0; this.level=0; this.boostT=0; this.spinT=0; this.slowT=0; this.stunT=0; this.bumpT=0; this.hopT=0;
     this.offroad=false; this.rubber=1; this.lastI=-1; this.s=0; this.lap=0; this.half=true; this.progress=0;
     this.finished=false; this.finishTime=0; this.rank=idx+1; this.events=[];
-    this.qCD=0; this.rCharge=15; this.shieldT=0; this.immuneT=0; this.steerS=0; this.blindT=0; this.invisT=0; this.pasT=0; this.ballT=0; this.huntT=0; this.lightSlowT=0; this.trailT=0; this.warnT=0;
+    this.qCD=0; this.rCharge=15; this.shieldT=0; this.wallT=0; this.immuneT=0; this.steerS=0; this.blindT=0; this.invisT=0; this.pasT=0; this.ballT=0; this.huntT=0; this.lightSlowT=0; this.trailT=0; this.warnT=0;
   }
   place(track,s,lat){
     const m=track.sample(s); this.pos.set(m.pos.x+m.nrm.x*lat,0,m.pos.z+m.nrm.z*lat);
@@ -45,7 +45,7 @@ export class Kart{
 
   update(dt,track,racing){
     const I=this.input, T=track;
-    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD','immuneT'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
+    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD','immuneT','wallT'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
     const control=racing&&!this.finished&&this.spinT<=0&&this.stunT<=0&&this.y<=.01;
     // 目標速度
     let max=K.MAX*this.rubber;
@@ -76,7 +76,7 @@ export class Kart{
     }
     if(!this.drift) turn=steer*K.TURN*(.45+.55*sp01)*(this.boostT>0?.85:1);
     if(this.spinT>0) this.heading=this.spinH+(1-this.spinT/this.spinDur)*Math.PI*4;   // 被打中：轉兩圈後回到原方向
-    else this.heading-=turn*dt*sp01;                              // steer 正 = 右轉
+    else this.heading-=turn*dt*Math.max(sp01,.55);                // steer 正 = 右轉；速度很慢時也保有轉向力（撞牆後才轉得出來）
     // 速度向量（甩尾時側滑）
     const f=this.fwd(), target=f.multiplyScalar(this.speed), grip=this.drift?K.DRIFT_GRIP:(this.spinT>0?1.5:K.GRIP);
     this.vel.lerp(target,1-Math.exp(-grip*dt));
@@ -90,8 +90,23 @@ export class Kart{
     if(Math.abs(q.lat)>edge){
       const n=T.Nm[q.i], side=Math.sign(q.lat), push=Math.abs(q.lat)-edge;
       this.pos.x-=n.x*side*push; this.pos.z-=n.z*side*push;
-      const vn=this.vel.x*n.x*side+this.vel.z*n.z*side;
-      if(vn>0){ this.vel.x-=n.x*side*vn*1.5; this.vel.z-=n.z*side*vn*1.5; this.speed*=vn>8?.72:.92; if(vn>5){ this.bumpT=.25; this.events.push('wall'); } }
+      const vn=this.vel.x*n.x*side+this.vel.z*n.z*side, vm=Math.hypot(this.vel.x,this.vel.z);
+      if(vn>0){
+        if(this.wallT<=0&&vn>3){                                        // 撞上的那一下：依正面程度扣速度，並稍微彈開
+          const impact=Math.min(1,vn/Math.max(1,vm));
+          this.speed*=1-.5*impact; this.wallT=.35;
+          this.vel.x-=n.x*side*vn*1.4; this.vel.z-=n.z*side*vn*1.4;
+          if(vn>5){ this.bumpT=.25; this.events.push('wall'); }
+        } else { this.vel.x-=n.x*side*vn; this.vel.z-=n.z*side*vn; }   // 持續貼牆：只去掉撞進牆的分量，沿牆滑行
+      }
+      // 車頭對著牆：自動慢慢轉向賽道前進方向（玩家往反方向打時讓步）
+      const f=this.fwd(), into=f.x*n.x*side+f.z*n.z*side;
+      if(into>.35&&this.spinT<=0){
+        const t=T.T[q.i], want=Math.atan2(t.x,t.z); let d=want-this.heading; d=Math.atan2(Math.sin(d),Math.cos(d));
+        const assist=Math.sign(d)*Math.min(Math.abs(d),2.6*dt*into);
+        if(!(this.human&&this.input.steer*d>0&&Math.abs(this.input.steer)>.3)) this.heading+=assist;   // steer 正是右轉＝heading 減少
+        this.speed+=(Math.max(vm,4)-this.speed)*Math.min(1,dt*2);      // 卡著不動時速度不要虛高
+      }
     }
     // 加速板
     for(const pd of T.pads){ let ds=q.s-pd.s; if(ds>T.L/2) ds-=T.L; if(ds<-T.L/2) ds+=T.L; if(Math.abs(ds)<pd.len/2&&Math.abs(q.lat-pd.lat)<pd.w/2&&this.y<.3){ if(this.boostT<.9) this.boost(1.1); } }
