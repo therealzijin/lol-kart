@@ -1,6 +1,10 @@
 // 技能系統：少數幾種「零件」組合出 8 位英雄的 Q / R。
-// 場上物件（彈、陷阱、區域）都是純資料 {id, kind, mode, x, z, …}，方便之後透過網路同步。
+// 場上物件（彈、陷阱、區域）都是純資料 {id, kind, mode, x, z, …}。
 // mode：straight 直線｜homing 追蹤｜rail 沿賽道｜rocket 沿賽道追第一名｜static 固定｜follow 跟著施放者
+//
+// 連線對戰的原則：
+// - 施放：施放者那支手機決定目標，把 {seq, 位置, 方向, 目標} 傳給對方，對方用同樣的程式「重播」，產生同樣 id 的物件。
+// - 命中：只判定「這支手機負責的車」（k.local）。命中後 report()：通知對方移除彈道、幫施放者加充能、播特效。
 import {K} from './kart.js';
 
 const R_RATE=2.2, R_ON_HIT=15;           // 大招每秒自然充能、打中別人加多少
@@ -22,34 +26,52 @@ function ahead(race,k,maxGap,cone){
 }
 const behind=(race,k,maxGap)=>race.karts.filter(o=>o!==k&&!o.finished&&k.progress-o.progress>1&&k.progress-o.progress<maxGap);
 const near=(race,k,r)=>race.karts.filter(o=>o!==k&&!o.finished&&dist2(o.pos,k.pos)<r*r);
+// 選目標：重播時用對方傳來的目標；自己施放時記下選了誰
+function pick(race,fn){ const c=race.ctx; if(c&&c.replay) return c.target>=0?race.karts[c.target]:null; const t=fn(); if(c) c.target=t?t.idx:-1; return t; }
 
-function spawn(race,o){ o.id=nextId++; o.age=0; o.hit=[]; race.fx.push(o); return o; }
+function spawn(race,o){ const c=race.ctx; o.id=c?`${c.k}.${c.seq}.${c.n++}`:'z'+(nextId++); o.age=0; o.hit=[]; race.fx.push(o); return o; }
 function shot(race,k,kind,opt){
-  const f=fwdOf(k), a=opt.ang||0, dx=f.x*Math.cos(a)-f.z*Math.sin(a)*-1, dz=f.z*Math.cos(a)+f.x*Math.sin(a)*-1;
-  const n=Math.hypot(dx,dz);
+  const f=fwdOf(k), a=opt.ang||0, dx=f.x*Math.cos(a)+f.z*Math.sin(a), dz=f.z*Math.cos(a)-f.x*Math.sin(a), n=Math.hypot(dx,dz);
   return spawn(race,Object.assign({kind,owner:k.idx,mode:'straight',x:k.pos.x+f.x*1.6,z:k.pos.z+f.z*1.6,y:1,dx:dx/n,dz:dz/n,v:60,r:1,life:1,eff:{}},opt));
 }
 function railShot(race,k,kind,opt){
   const q=race.track.nearest(k.pos,k.lastI);
   return spawn(race,Object.assign({kind,owner:k.idx,mode:'rail',s:q.s+2,lat:q.lat,x:k.pos.x,z:k.pos.z,y:1.2,v:80,r:2,life:3,eff:{}},opt));
 }
-function boom(race,x,z,r,eff,owner,kind){ let first=true;
+// 範圍效果：只作用在這支手機負責的車
+function boom(race,x,z,r,eff,owner,kind,skip){ let first=true;
   race.events.push({k:-1,e:'boom',x,z,r,kind:kind||'boom'});
-  for(const o of race.karts){ if(o.idx===owner||o.finished) continue; if((o.pos.x-x)**2+(o.pos.z-z)**2<r*r){ const res=o.hit(eff); credit(race,owner,res,first?1:.3); if(res===true) first=false; } }
+  for(const o of race.karts){ if(!o.local||o.idx===owner||o.idx===skip||o.finished) continue;
+    if((o.pos.x-x)**2+(o.pos.z-z)**2<r*r){ const res=o.hit(eff); report(race,{owner,victim:o.idx,res,kind:kind||'boom',x:o.pos.x,z:o.pos.z,mul:first?1:.3}); if(res===true) first=false; } }
 }
-function credit(race,owner,res,mul){ if(res===true&&owner>=0){ const k=race.karts[owner]; k.rCharge=Math.min(100,k.rCharge+R_ON_HIT*(mul==null?1:mul)); k.events.push('landed'); } }
+function applyCredit(race,h){ if(h.res!==true||h.owner<0) return; const k=race.karts[h.owner]; if(!k||!k.local) return;
+  k.rCharge=Math.min(100,k.rCharge+R_ON_HIT*(h.mul==null?1:h.mul)); k.events.push('landed'); if(h.refund) k.qCD*=.35; }
+// 這支手機判定到命中 → 自己處理 + 通知對方
+function report(race,h){
+  applyCredit(race,h);
+  race.events.push({k:h.victim,e:'fxhit',kind:h.kind,x:h.x,z:h.z,blocked:h.res==='block'});
+  if(race.onHit) race.onHit(h);
+}
+// 對方判定到的命中
+export function remoteHit(race,h){
+  if(h.id!=null){ const o=race.fx.find(f=>f.id===h.id); if(o){ if(h.pierce) o.hit.push(h.victim); else o.life=0; } }
+  if(race.karts[h.owner]&&race.karts[h.owner].ballT>0&&h.kind==='ball') race.karts[h.owner].ballT=0;
+  applyCredit(race,h);
+  race.events.push({k:h.victim,e:'fxhit',kind:h.kind,x:h.x,z:h.z,blocked:h.res==='block'});
+  if(h.boom) boom(race,h.boom.x,h.boom.z,h.boom.r,h.boom.eff,h.owner,h.boom.kind,h.victim);   // 對方那邊炸開 → 這邊的車也要吃到
+}
 
 /* ---------- 8 位英雄 ---------- */
 export const KITS={
   Teemo:{
-    q:{cd:7, cast(race,k){ const t=ahead(race,k,70,.8); shot(race,k,'dart',{mode:t?'homing':'straight',target:t?t.idx:-1,v:62,r:1,life:1.6,eff:{blind:2.2,slow:.7}}); }},
+    q:{cd:7, cast(race,k){ const t=pick(race,()=>ahead(race,k,70,.8)); shot(race,k,'dart',{mode:t?'homing':'straight',target:t?t.idx:-1,v:62,r:1,life:1.6,eff:{blind:2.2,slow:.7}}); }},
     r:{cast(race,k){ const f=fwdOf(k), nx=f.z, nz=-f.x; const mine=race.fx.filter(o=>o.kind==='shroom'&&o.owner===k.idx); while(mine.length>=6){ const old=mine.shift(); old.life=0; }
       [-3,0,3].forEach(l=>spawn(race,{kind:'shroom',owner:k.idx,mode:'static',x:k.pos.x-f.x*3.5+nx*l,z:k.pos.z-f.z*3.5+nz*l,y:0,r:1.3,life:40,arm:.6,eff:{spin:1.1,slow:1.4}})); }},
     ai(race,k){ return {q:!!ahead(race,k,55,.9), r:behind(race,k,35).length>0}; },
   },
   Jinx:{
     q:{cd:6, cast(race,k){ shot(race,k,'zap',{v:78,r:1.3,life:.9,eff:{stun:.4,slow:2}}); }},
-    r:{cast(race,k){ const order=[...race.karts].filter(o=>o!==k&&!o.finished).sort((a,b)=>a.rank-b.rank); const t=order[0]; if(!t) return false;
+    r:{cast(race,k){ const t=pick(race,()=>[...race.karts].filter(o=>o!==k&&!o.finished).sort((a,b)=>a.rank-b.rank)[0]); if(!t) return false;
       const q=race.track.nearest(k.pos,k.lastI); spawn(race,{kind:'rocket',owner:k.idx,mode:'rocket',target:t.idx,s:q.s+2,lat:q.lat,x:k.pos.x,z:k.pos.z,y:1.6,v:62,r:2.2,life:14,eff:{knock:9,spin:1.3},boomR:5}); }},
     ai(race,k){ return {q:!!ahead(race,k,55,.14), r:k.rank>1}; },
   },
@@ -86,12 +108,22 @@ export const KITS={
 };
 
 /* ---------- 施放 ---------- */
-export function cast(race,k,slot){
-  if(race.phase!=='race'&&race.phase!=='finish') return false;
-  if(k.finished||k.spinT>0||k.stunT>0) return false;
+// rep：對方傳來的施放紀錄 {seq, x, z, h, target}；有 rep 時不檢查冷卻（對方已經檢查過）
+export function cast(race,k,slot,rep){
   const kit=KITS[k.champ]; if(!kit) return false;
-  if(slot==='q'){ if(k.qCD>0) return false; if(kit.q.cast(race,k)===false) return false; k.qCD=kit.q.cd; }
-  else { if(k.rCharge<100) return false; if(kit.r.cast(race,k)===false) return false; k.rCharge=0; }
+  if(!rep){
+    if(!k.local||(race.phase!=='race'&&race.phase!=='finish')) return false;
+    if(k.finished||k.spinT>0||k.stunT>0) return false;
+    if(slot==='q'?k.qCD>0:k.rCharge<100) return false;
+  }
+  race.ctx={k:k.idx,seq:rep?rep.seq:++k.castSeq,n:0,target:rep?rep.target:null,replay:!!rep};
+  const saved=rep?{x:k.pos.x,z:k.pos.z,h:k.heading}:null;
+  if(rep){ k.pos.x=rep.x; k.pos.z=rep.z; k.heading=rep.h; }       // 用施放當下的真實位置，比內插位置準
+  let ok;
+  try{ ok=(slot==='q'?kit.q:kit.r).cast(race,k)!==false; }
+  finally{ const c=race.ctx; race.ctx=null; if(saved){ k.pos.x=saved.x; k.pos.z=saved.z; k.heading=saved.h; }
+    if(ok&&!rep){ if(slot==='q') k.qCD=kit.q.cd; else k.rCharge=0; if(race.onCast) race.onCast({k:k.idx,slot,seq:c.seq,x:k.pos.x,z:k.pos.z,h:k.heading,target:c.target}); } }
+  if(!ok) return false;
   race.events.push({k:k.idx,e:'cast',slot,champ:k.champ}); return true;
 }
 // 電腦：技能好了就依情況決定要不要放（有一點反應延遲）
@@ -106,12 +138,12 @@ export function aiCast(race,k){
 export function stepSkills(race,dt){
   const T=race.track, edge=T.half+T.off;
   for(const k of race.karts){
-    if(race.phase==='race'&&!k.finished) k.rCharge=Math.min(100,k.rCharge+R_RATE*dt);
+    if(k.local&&race.phase==='race'&&!k.finished) k.rCharge=Math.min(100,k.rCharge+R_RATE*dt);
     // 吉茵珂絲被動：名次變好就加速
-    if(k.champ==='Jinx'){ if(k.prevRank&&k.rank<k.prevRank&&race.phase==='race'&&(k.pasT||0)<=0){ k.boost(.7); k.pasT=2.5; k.events.push('excited'); } k.prevRank=k.rank; }
+    if(k.champ==='Jinx'&&k.local){ if(k.prevRank&&k.rank<k.prevRank&&race.phase==='race'&&(k.pasT||0)<=0){ k.boost(.7); k.pasT=2.5; k.events.push('excited'); } k.prevRank=k.rank; }
     // 圖奇被動：緊跟在後的人中毒
-    if(k.champ==='Twitch') for(const o of behind(race,k,9)) o.lightSlowT=Math.max(o.lightSlowT,.2);
-    // 圖奇大招：身後留下毒霧
+    if(k.champ==='Twitch') for(const o of behind(race,k,9)) if(o.local) o.lightSlowT=Math.max(o.lightSlowT,.2);
+    // 圖奇大招：身後留下毒霧（兩邊各自產生，只影響自己負責的車）
     if(k.trailT>0){ k.trailAcc=(k.trailAcc||0)+dt; if(k.trailAcc>=.22){ k.trailAcc=0; const f=fwdOf(k); spawn(race,{kind:'poison',owner:k.idx,mode:'static',x:k.pos.x-f.x*2.2,z:k.pos.z-f.z*2.2,y:0,r:2.8,life:6,zone:{slow:.35}}); } }
   }
   for(const o of race.fx){
@@ -123,30 +155,33 @@ export function stepSkills(race,dt){
       const t=o.mode==='rocket'?race.karts[o.target]:null;
       if(t&&!t.finished){ t.warnT=.2; let gap=t.s-o.s; if(gap<-T.L/2) gap+=T.L; if(gap>T.L/2) gap-=T.L;
         if(gap<9&&gap>-4){ o.mode='homing'; o.v=46; const dx=t.pos.x-o.x, dz=t.pos.z-o.z, d=Math.hypot(dx,dz)||1; o.dx=dx/d; o.dz=dz/d; continue; }
-        o.lat+=((() => { const q=T.nearest(t.pos,t.lastI); return q.lat; })()-o.lat)*Math.min(1,dt*1.5); }
+        const tq=T.nearest(t.pos,t.lastI); o.lat+=(tq.lat-o.lat)*Math.min(1,dt*1.5); }
       else o.lat*=Math.max(0,1-dt*.6);
       o.s+=o.v*dt; const m=T.sample(o.s); o.x=m.pos.x+m.nrm.x*o.lat; o.z=m.pos.z+m.nrm.z*o.lat; o.dx=m.tan.x; o.dz=m.tan.z;
     }
     else if(o.mode==='follow'){ const k=race.karts[o.owner]; o.x=k.pos.x; o.z=k.pos.z; }
-    // 命中
+    // 命中（只判定這支手機負責的車）
     if(o.arm&&o.age<o.arm) continue;
     for(const k of race.karts){
-      if(k.finished||(k.idx===o.owner&&o.mode!=='static')||o.hit.includes(k.idx)) continue;
+      if(!k.local||k.finished||(k.idx===o.owner&&o.mode!=='static')||o.hit.includes(k.idx)) continue;
       if(o.kind==='shroom'&&k.idx===o.owner) continue;
       const rr=o.r+K.R; if((k.pos.x-o.x)**2+(k.pos.z-o.z)**2>rr*rr||Math.abs((k.y||0)-(o.mode==='static'||o.mode==='follow'?0:.3))>2.2) continue;
       if(o.zone){ k.slowT=Math.max(k.slowT,o.zone.slow); continue; }                       // 區域：在裡面就減速
       o.hit.push(k.idx);
-      const res=k.hit(o.eff); credit(race,o.owner,res,o.credit);
+      const res=k.hit(o.eff);
       if(res===true&&o.pull){ const b=race.karts[o.owner], f=fwdOf(b); k.pos.set(b.pos.x-f.x*3.8,0,b.pos.z-f.z*3.8); k.heading=b.heading; k.vel.set(f.x*b.speed*.4,0,f.z*b.speed*.4); k.speed=b.speed*.4; k.lastI=-1; race.events.push({k:o.owner,e:'pull',t:k.idx}); }
-      if(res===true&&o.refund){ const b=race.karts[o.owner]; b.qCD*=.35; }
-      if(o.boomR) boom(race,o.x,o.z,o.boomR,o.boomEff||o.eff,o.owner,o.kind);
-      race.events.push({k:k.idx,e:'fxhit',kind:o.kind,x:o.x,z:o.z,blocked:res==='block'});
+      const bm=o.boomR?{x:o.x,z:o.z,r:o.boomR,eff:o.boomEff||o.eff,kind:o.kind}:null;
+      report(race,{id:o.id,owner:o.owner,victim:k.idx,res,kind:o.kind,x:o.x,z:o.z,mul:o.credit,refund:!!o.refund,pierce:!!o.pierce,boom:bm});
+      if(bm) boom(race,bm.x,bm.z,bm.r,bm.eff,o.owner,bm.kind,k.idx);
       if(!o.pierce){ o.life=0; break; }
     }
   }
   race.fx=race.fx.filter(o=>o.life>0);
 }
-// 拉姆斯滾球撞到人
+// 拉姆斯滾球撞到人：被撞的那台所屬的手機判定
 export function onCollide(race,a,b){
-  for(const [x,y] of [[a,b],[b,a]]) if(x.ballT>0){ x.ballT=0; const res=y.hit({knock:8,spin:1}); credit(race,x.idx,res); race.events.push({k:y.idx,e:'fxhit',kind:'ball',x:y.pos.x,z:y.pos.z,blocked:res==='block'}); }
+  for(const [x,y] of [[a,b],[b,a]]) if(x.ballT>0){
+    if(x.local) x.ballT=0;
+    if(y.local){ const res=y.hit({knock:8,spin:1}); report(race,{owner:x.idx,victim:y.idx,res,kind:'ball',x:y.pos.x,z:y.pos.z}); }
+  }
 }

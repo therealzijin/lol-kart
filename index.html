@@ -45,6 +45,13 @@ input.txt{width:100%;padding:10px 12px;border-radius:10px;border:2px solid var(-
 .big.go:active{transform:translateY(2px);box-shadow:0 2px 0 #B8741D}
 .big.ghost{border:2px solid var(--line);font-size:14px;padding:11px}
 .note{font-size:11px;opacity:.55;line-height:1.5;margin-top:10px}
+#s-online{flex-direction:column;align-items:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) 16px 18px;background:radial-gradient(ellipse at 50% 0%,#1E3A5C 0,#0B1320 70%)}
+.ops{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.op{background:rgba(255,255,255,.07);border:2px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center}
+.op img{width:54px;height:54px;border-radius:50%} .op b{font-size:15px} .op small{font-size:11px;opacity:.7} .op i{font-style:normal;font-size:10px;font-weight:800;color:var(--gold)}
+.op.empty{justify-content:center;font-size:12px;opacity:.6;min-height:110px}
+.seg button:disabled{opacity:.4}
+.big:disabled{opacity:.45;box-shadow:none}
 .err{color:#FF9A8B;font-size:13px;min-height:18px;margin-top:6px}
 /* ---------- 讀取 ---------- */
 #s-load{align-items:center;justify-content:center;flex-direction:column;background:rgba(11,19,32,.92);gap:12px}
@@ -156,6 +163,26 @@ body.racing.portrait #rotate{display:flex}
   </div>
 </section>
 
+<section class="screen" id="s-online">
+  <div class="t-wrap" style="max-width:520px">
+    <div class="t-top"><button class="seg" id="o-back" style="padding:6px 12px;font-weight:900">‹</button><h1 data-i="onlineTitle"></h1></div>
+    <div id="o-choose">
+      <button class="big go" id="o-host" data-i="makeRoom"></button>
+      <div class="lbl" data-i="orJoin" style="margin-top:16px"></div>
+      <div style="display:flex;gap:8px"><input class="txt" id="o-code" inputmode="numeric" maxlength="4" style="flex:1;font-size:20px;letter-spacing:.2em;text-align:center"><button class="big go" id="o-join" data-i="join" style="width:auto;margin:0;padding:0 22px"></button></div>
+    </div>
+    <div id="o-lobby" style="display:none">
+      <div class="lbl" data-i="codePh"></div>
+      <div id="o-codebig" style="font-size:54px;font-weight:900;letter-spacing:.14em;color:var(--gold);text-align:center"></div>
+      <p id="o-status" style="text-align:center;font-size:13px;opacity:.8;margin:4px 0 10px"></p>
+      <div id="o-players" class="ops"></div>
+      <div id="o-cpu-row"><div class="lbl" data-i="cpuCount"></div><div class="seg" id="seg-cpu"><button data-v="0">0</button><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
+      <button class="big go" id="o-start" data-i="start"></button>
+    </div>
+    <div class="err" id="o-err"></div>
+    <p class="note" data-i="onlineNote"></p>
+  </div>
+</section>
 <section class="screen" id="s-load"><div id="load-t"></div><div class="bar"><i id="load-bar"></i></div><div id="load-s"></div></section>
 <section class="screen" id="s-result"><div class="res" id="res"></div></section>
 <div id="rotate"><div class="ph"></div><div data-i="rotate"></div></div>

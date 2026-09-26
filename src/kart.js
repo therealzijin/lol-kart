@@ -102,12 +102,14 @@ export class Kart{
 }
 
 // 兩台之間的碰撞：推開並交換側向動量
-export function collide(a,b){
+// la / lb：這支手機負責哪一台（另一台是網路同步來的，不要推它）
+export function collide(a,b,la=true,lb=true){
   const dx=b.pos.x-a.pos.x, dz=b.pos.z-a.pos.z, d2=dx*dx+dz*dz, R=K.R*2;
   if(d2>=R*R||d2<1e-6||Math.abs(a.y-b.y)>1.2) return false;
   const d=Math.sqrt(d2), nx=dx/d, nz=dz/d, pen=(R-d)/2;
-  a.pos.x-=nx*pen; a.pos.z-=nz*pen; b.pos.x+=nx*pen; b.pos.z+=nz*pen;
+  const wa=la&&lb?1:la?2:0, wb=la&&lb?1:lb?2:0;
+  a.pos.x-=nx*pen*wa; a.pos.z-=nz*pen*wa; b.pos.x+=nx*pen*wb; b.pos.z+=nz*pen*wb;
   const rel=(b.vel.x-a.vel.x)*nx+(b.vel.z-a.vel.z)*nz;
-  if(rel<0){ const ka=a.heavy||1, kb=b.heavy||1, j=-rel*.9; a.vel.x-=nx*j*kb/(ka+kb)*1.6; a.vel.z-=nz*j*kb/(ka+kb)*1.6; b.vel.x+=nx*j*ka/(ka+kb)*1.6; b.vel.z+=nz*j*ka/(ka+kb)*1.6; }
+  if(rel<0){ const ka=a.heavy||1, kb=b.heavy||1, j=-rel*.9; if(la){ a.vel.x-=nx*j*kb/(ka+kb)*1.6; a.vel.z-=nz*j*kb/(ka+kb)*1.6; } if(lb){ b.vel.x+=nx*j*ka/(ka+kb)*1.6; b.vel.z+=nz*j*ka/(ka+kb)*1.6; } }
   a.bumpT=b.bumpT=.15; return true;
 }
