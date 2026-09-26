@@ -1,16 +1,16 @@
 // 兩支手機對戰：大廳、開賽同步、狀態同步（每秒 20 次）、技能重播、斷線處理。
 // 分工：每支手機負責自己的車；房主另外負責電腦。
 // 對方的車：用「最後收到的狀態＋速度×(經過時間＋單程延遲)」推算它現在在哪，再平滑靠過去（不再顯示過去的位置）。
-import {Net} from './net.js?v=20260926191638';
-import {T,lang} from './i18n.js?v=20260926191638';
-import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260926191638';
-import {cast,remoteHit} from './skills.js?v=20260926191638';
-import {initAI} from './ai.js?v=20260926191638';
+import {Net} from './net.js?v=20260926202236';
+import {T,lang} from './i18n.js?v=20260926202236';
+import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260926202236';
+import {cast,remoteHit} from './skills.js?v=20260926202236';
+import {initAI} from './ai.js?v=20260926202236';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const SEND_EVERY=2;                     // 每幾個模擬步送一次（60/2 = 30Hz）
-const F=['x','z','y','vy','heading','speed','vx','vz','drift','level','driftT','lap','s','half','fin','ft','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','steer','offroad','trailT','lightSlowT','bumpT','immuneT'];
+const F=['x','z','y','vy','heading','speed','vx','vz','drift','level','driftT','lap','s','half','fin','ft','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','steer','offroad','trailT','lightSlowT','bumpT','immuneT','chargeT','yiT'];
 
 let net=null, G=null, me=-1, cpuN=2, opp=null, state='idle', readySelf=false, readyOpp=false, pendingStart=null, lastCfg=null;
 const rem={};                            // idx → {L:最新狀態, tr:收到時間, st:對方送出時間, angV:轉向速度}
@@ -19,7 +19,7 @@ let lastN=0, sendN=0;
 /* ---------- 狀態打包／套用 ---------- */
 const r3=v=>Math.round(v*1000)/1000;
 function pack(k){ return [k.idx,r3(k.pos.x),r3(k.pos.z),r3(k.y),r3(k.vy),r3(k.heading),r3(k.speed),r3(k.vel.x),r3(k.vel.z),k.drift,k.level,r3(k.driftT),k.lap,r3(k.s),k.half?1:0,k.finished?1:0,r3(k.finishTime||0),
-  r3(k.boostT),r3(k.spinT),r3(k.stunT),r3(k.slowT),r3(k.shieldT),r3(k.invisT),r3(k.ballT),r3(k.hopT),r3(k.input.steer),k.offroad?1:0,r3(k.trailT),r3(k.lightSlowT),r3(k.bumpT),r3(k.immuneT)]; }
+  r3(k.boostT),r3(k.spinT),r3(k.stunT),r3(k.slowT),r3(k.shieldT),r3(k.invisT),r3(k.ballT),r3(k.hopT),r3(k.input.steer),k.offroad?1:0,r3(k.trailT),r3(k.lightSlowT),r3(k.bumpT),r3(k.immuneT),r3(k.chargeT),r3(k.yiT)]; }
 function unpack(a){ const o={}; F.forEach((f,i)=>o[f]=a[i+1]); return o; }
 const lerpA=(a,b,u)=>{ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*u; };
 export function applyRemote(race,k){
@@ -33,7 +33,7 @@ export function applyRemote(race,k){
   k.pos.set(tx+R.ox,0,tz+R.oz); k.heading=th+R.oh;
   k.y=(L.y>0||L.vy>0)?Math.max(0,L.y+L.vy*age-12*age*age):0;
   k.vel.set(L.vx,0,L.vz); k.speed=L.speed; k.vy=L.vy;
-  ['drift','level','driftT','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','trailT','lightSlowT','bumpT','immuneT'].forEach(f=>k[f]=L[f]||0);
+  ['drift','level','driftT','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','trailT','lightSlowT','bumpT','immuneT','chargeT','yiT'].forEach(f=>k[f]=L[f]||0);
   k.offroad=!!L.offroad; k.input.steer=L.steer; k.lap=L.lap; k.s=L.s; k.half=!!L.half;
   const q=race.track.nearest(k.pos,k.lastI); k.lastI=q.i; k.calcProgress(race.track);
   if(L.fin&&!k.finished) race.markFinished(k,L.ft);
@@ -48,9 +48,10 @@ function lobbyUI(){
   else pl.push(`<div class="op empty">${T('waitingGuest')}</div>`);
   $('o-players').innerHTML=pl.join('');
   $('o-codebig').textContent=net?net.code:'';
-  $('o-cpu-row').style.display=host?'':'none';
+  $('o-cpu-row').style.display=host?'':'none'; $('o-laps-row').style.display=host?'':'none';
+  document.querySelectorAll('#seg-olaps button').forEach(b=>b.classList.toggle('sel',+b.dataset.v===G.getLaps()));
   $('o-start').style.display=host?'':'none'; $('o-start').disabled=!opp;
-  $('o-status').textContent=host?(opp?T('guestJoined',{n:opp.name}):T('tellCode')):T('waitingHost');
+  $('o-status').textContent=(host?(opp?T('guestJoined',{n:opp.name}):T('tellCode')):T('waitingHost'))+(host?'':`（${T('laps')}：${T('lapsIs',{n:G.getLaps()})}）`);
   document.querySelectorAll('#seg-cpu button').forEach(b=>b.classList.toggle('sel',+b.dataset.v===cpuN));
 }
 function showChoose(){ $('o-choose').style.display=''; $('o-lobby').style.display='none'; $('o-err').textContent=''; }
@@ -63,7 +64,7 @@ function makeConfig(){
   const list=[{name:H.name,champ:H.champ,skin:H.skin,human:true,side:'host'},{name:opp.name,champ:opp.champ,skin:opp.skin,human:true,side:'guest'}];
   for(let i=0;i<cpuN;i++){ const c=pool[i%pool.length]; list.push({name:`${c.name[lang]} ${'ABC'[Math.floor(i/2)]}`,champ:c.id,skin:String(c.key*1000),cpu:true,side:'host'}); }
   list.forEach(e=>e.url=modelUrl(e.champ,e.skin));
-  return {entrants:list,seed:Math.floor(Math.random()*1e9)};
+  return {entrants:list,seed:Math.floor(Math.random()*1e9),laps:G.getLaps()};
 }
 function beginFromConfig(cfg){
   lastCfg=cfg; readySelf=false; readyOpp=false; Object.keys(rem).forEach(k=>delete rem[k]); lastN=0;
@@ -71,7 +72,8 @@ function beginFromConfig(cfg){
   const list=cfg.entrants.map(e=>Object.assign({},e,{local:e.side===mine}));
   me=list.findIndex(e=>e.human&&e.side===mine);
   state='loading';
-  G.startRace(list,{me,seed:cfg.seed,online:true,
+  if(cfg.laps) G.setLaps(cfg.laps);
+  G.startRace(list,{me,seed:cfg.seed,online:true,laps:cfg.laps||3,
     applyRemote:(race,k)=>applyRemote(race,k),
     onCast:c=>{ if(net) net.send(Object.assign({t:'cast'},c)); },
     onHit:h=>{ if(net) net.send(Object.assign({t:'hit'},h)); },
@@ -85,8 +87,9 @@ export function setResults(){ if(state==='racing') state='results'; }
 /* ---------- 連線事件 ---------- */
 function wire(){
   net.on('hello',m=>{ opp={name:m.name,champ:m.champ,skin:m.skin}; if(net.isHost){ net.send({t:'hello',...G.myEntry()}); } lobbyUI(); })
-     .on('_join',()=>{ net.send({t:'hello',...G.myEntry()}); })
+     .on('_join',()=>{ net.send({t:'hello',...G.myEntry()}); net.send({t:'laps',n:G.getLaps()}); })
      .on('cpu',m=>{ cpuN=m.n; lobbyUI(); })
+     .on('laps',m=>{ if([3,5,7].includes(m.n)) G.setLaps(m.n); lobbyUI(); })
      .on('config',m=>{ if(!net.isHost) beginFromConfig(m.cfg); })
      .on('ready',()=>{ readyOpp=true; tryGo(); })
      .on('go',()=>{ if(!net.isHost){ if(readySelf) go(); else pendingStart=true; } })
@@ -116,6 +119,7 @@ function lost(){
 export function initOnline(api){
   G=api;
   document.querySelectorAll('#seg-cpu button').forEach(b=>b.onclick=()=>{ cpuN=+b.dataset.v; if(net) net.send({t:'cpu',n:cpuN}); lobbyUI(); });
+  document.querySelectorAll('#seg-olaps button').forEach(b=>b.onclick=()=>{ G.setLaps(+b.dataset.v); if(net) net.send({t:'laps',n:+b.dataset.v}); lobbyUI(); });
   $('o-host').onclick=async()=>{
     $('o-err').textContent=T('connecting'); leave(true);
     net=new Net(); wire();

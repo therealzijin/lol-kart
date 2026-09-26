@@ -1,7 +1,7 @@
 // 比賽進行：起跑格、倒數、固定步長模擬、碰撞、名次、完賽。只有邏輯，沒有畫面。
-import {Kart,collide} from './kart.js?v=20260926191638';
-import {initAI,driveAI} from './ai.js?v=20260926191638';
-import {stepSkills,cast,aiCast,onCollide} from './skills.js?v=20260926191638';
+import {Kart,collide,K} from './kart.js?v=20260926202236';
+import {initAI,driveAI} from './ai.js?v=20260926202236';
+import {stepSkills,cast,aiCast,onCollide} from './skills.js?v=20260926202236';
 
 export const DT=1/60;
 function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
@@ -10,7 +10,7 @@ export class Race{
   // opts.applyRemote(k)：連線時，把網路收到的狀態套到「不是這支手機負責」的車上
   constructor(track,entrants,seed,opts){
     opts=opts||{}; this.applyRemote=opts.applyRemote||null; this.onCast=opts.onCast||null; this.onHit=opts.onHit||null;
-    this.track=track; this.rand=rng(seed||Date.now()); this.laps=track.laps;
+    this.track=track; this.rand=rng(seed||Date.now()); this.laps=opts.laps||track.laps;
     this.karts=entrants.map((e,i)=>new Kart(i,e)); this.fx=[];
     this.karts.forEach(k=>{ if(k.champ==='Rammus') k.heavy=2.5; if(k.local==null) k.local=true; k.castSeq=0; });
     // 起跑格：兩兩一排、交錯，人類排在後面（要超車才好玩）
@@ -35,6 +35,12 @@ export class Race{
     }
     for(let a=0;a<this.karts.length;a++) for(let b=a+1;b<this.karts.length;b++) { const A=this.karts[a], B=this.karts[b]; if((A.local||B.local)&&collide(A,B,A.local,B.local)) onCollide(this,A,B); }
     stepSkills(this,DT);
+    // 會動的障礙（小兵、河道蟹）：只判定這支手機負責的車
+    if(racing){ const hz=T.hazards(this.t);
+      for(const k of this.karts){ if(!k.local||k.finished||k.y>.7||k.immuneT>0) continue;
+        for(const o of hz){ const rr=o.r+K.R; if((k.pos.x-o.x)**2+(k.pos.z-o.z)**2>rr*rr) continue;
+          const res=k.hit(o.kind==='crab'?{knock:6,spin:.8}:{spin:.45,slow:.5});
+          if(res) this.events.push({k:k.idx,e:'fxhit',kind:o.kind,x:k.pos.x,z:k.pos.z,blocked:res==='block'}); break; } } }
     for(const k of this.karts){
       if(k.local&&!k.finished&&k.lap>this.laps) this.markFinished(k,this.time);
       k.events.forEach(e=>{

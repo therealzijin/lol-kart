@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926191638';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926191638';
-import {Track,TRACK_DEF} from './track.js?v=20260926191638';
-import {Race,DT} from './race.js?v=20260926191638';
-import {View} from './view.js?v=20260926191638';
-import {initInput,pollInput} from './input.js?v=20260926191638';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio} from './audio.js?v=20260926191638';
-import {initAI,driveAI} from './ai.js?v=20260926191638';
-import {KITS,cast} from './skills.js?v=20260926191638';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926202236';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926202236';
+import {Track,TRACK_DEF} from './track.js?v=20260926202236';
+import {Race,DT} from './race.js?v=20260926202236';
+import {View} from './view.js?v=20260926202236';
+import {initInput,pollInput} from './input.js?v=20260926202236';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio} from './audio.js?v=20260926202236';
+import {initAI,driveAI} from './ai.js?v=20260926202236';
+import {KITS,cast} from './skills.js?v=20260926202236';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -47,7 +47,7 @@ function renderKit(){ const c=byId(pick.champ), k=c.kit, sp=spellCache[c.id];
   $('kit').innerHTML=row(null,T('passive'),k.p[lang])+row('q',T('skill'),k.q[lang])+row('r',T('ult'),k.r[lang]); }
 
 /* ---------- 比賽 ---------- */
-let quality=ls.get('lk-q')||'std', lastDraw=0, rdt=0, hudT=0, miniT=0, view=null, track=null, race=null, me=0, acc=0, lastT=0, raf=0, bannerT=0, mode='solo', running=false, noticeT=0;
+let laps=[3,5,7].includes(+ls.get('lk-laps'))?+ls.get('lk-laps'):3, quality=ls.get('lk-q')||'std', lastDraw=0, rdt=0, hudT=0, miniT=0, view=null, track=null, race=null, me=0, acc=0, lastT=0, raf=0, bannerT=0, mode='solo', running=false, noticeT=0;
 function myName(){ return $('name').value.trim()||T('namePh').replace(/^.*：/,''); }
 function myEntry(){ return {name:myName(),champ:pick.champ,skin:pick.skin||String(byId(pick.champ).key*1000)}; }
 function entrantsSolo(){
@@ -69,7 +69,7 @@ async function startRace(list,opts){
   const urls=[...new Set(list.map(e=>e.url))];
   const res=await view.loadModels(urls,p=>$('load-bar').style.width=Math.round(p*100)+'%');
   if(res.some(r=>r.status==='rejected')){ $('load-s').textContent=T('loadFail'); await new Promise(r=>setTimeout(r,900)); }
-  race=new Race(track,list,opts.seed,opts.online?{applyRemote:k=>opts.applyRemote(race,k),onCast:opts.onCast,onHit:opts.onHit}:{});
+  race=new Race(track,list,opts.seed,opts.online?{applyRemote:k=>opts.applyRemote(race,k),onCast:opts.onCast,onHit:opts.onHit,laps:opts.laps}:{laps});
   const mine=race.karts[me];
   try{ await skinsOf(mine.champ); }catch(e){}
   ['q','r'].forEach(sl=>{ const b=$('b-'+sl), u=spellIcon(mine.champ,sl); b.style.backgroundImage=u?`url(${u})`:''; b.classList.toggle('icon',!!u); });
@@ -117,6 +117,10 @@ function flushEvents(hidden){
     else if(mine&&ev.e==='landed') sfx.landed();
     else if(mine&&ev.e==='hit') sfx.hit();
     else if(mine&&ev.e==='wall') sfx.wall();
+    else if(mine&&ev.e==='jump') sfx.jump();
+    else if(mine&&ev.e==='trick') sfx.trick();
+    else if(mine&&(ev.e==='trickBoost'||ev.e==='egg')) sfx.turbo(2);
+    else if(mine&&ev.e==='honey') sfx.honey();
     else if(mine&&ev.e==='finish'){ center(T('finish')); sfx.finish(); }
     else if(ev.e==='done') setTimeout(showResults,1600);
   }
@@ -175,7 +179,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260926191638';
+import * as Online from './online.js?v=20260926202236';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },
@@ -185,6 +189,7 @@ Online.initOnline({
   notice:msg=>{ if(running) banner(msg,4); },
   toTitle:()=>toTitle(),
   titleError:msg=>{ $('t-err').textContent=msg; },
+  getLaps:()=>laps, setLaps:n=>{ laps=n; ls.set('lk-laps',n); markLaps(); },
   resultsLeft:msg=>{ const ag=$('r-again'); if(ag) ag.remove(); const p=document.createElement('p'); p.className='note'; p.style.cssText='color:#B5122A;opacity:1;text-align:center'; p.textContent=msg; $('r-home').before(p); },
 });
 
@@ -194,6 +199,9 @@ document.querySelectorAll('#seg-lang button').forEach(b=>b.onclick=()=>setLang(b
 onLang(()=>{ $('name').placeholder=T('namePh'); $('o-code').placeholder=T('codePh'); if(document.getElementById('s-title').classList.contains('on')) renderRoster(); });
 document.querySelectorAll('#seg-q button').forEach(b=>b.onclick=()=>{ quality=b.dataset.v; ls.set('lk-q',quality); if(view) view.setQuality(quality); document.querySelectorAll('#seg-q button').forEach(x=>x.classList.toggle('sel',x===b)); });
 document.querySelectorAll('#seg-q button').forEach(x=>x.classList.toggle('sel',x.dataset.v===quality));
+function markLaps(){ document.querySelectorAll('#seg-laps button').forEach(x=>x.classList.toggle('sel',+x.dataset.v===laps)); }
+document.querySelectorAll('#seg-laps button').forEach(b=>b.onclick=()=>{ laps=+b.dataset.v; ls.set('lk-laps',laps); markLaps(); });
+markLaps();
 $('b-solo').onclick=()=>{ $('t-err').textContent=''; startRace(entrantsSolo(),{me:0}); };
 $('b-online').onclick=()=>{ $('t-err').textContent=''; show('s-online'); Online.openOnline(); };
 initInput(); applyLang();

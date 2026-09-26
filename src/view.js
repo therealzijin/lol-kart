@@ -4,8 +4,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import {byId,ROSTER} from './roster.js?v=20260926191638';
-import {K} from './kart.js?v=20260926191638';
+import {byId,ROSTER} from './roster.js?v=20260926202236';
+import {K} from './kart.js?v=20260926202236';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -15,7 +15,7 @@ const CLIP={idle:[/^idle1(_base)?(\.|$)/i,/^idle1/i,/^idle/i], hit:[/^knockup/i,
 const findClip=(clips,key)=>{ for(const r of CLIP[key]){ const c=clips.find(c=>r.test(c.name)); if(c) return c; } return null; };
 // 施放技能時播遊戲裡真正的施法動作（Spell1～4）
 const spellClip=(clips,n)=>clips.find(c=>new RegExp('^spell'+n+'(\\.|$|_?a?$)','i').test(c.name))||clips.find(c=>new RegExp('^spell'+n,'i').test(c.name)&&!/toidle|torun|_in/i.test(c.name));
-const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A};
+const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A,beartrap:0xC9A46B,icewall:0xBFE8FF,storm:0x9FD8FF,alpha:0xC8FF6B,charge:0xFF7A3A,slam:0x6FD86B,minion:0xFFE27A,crab:0x5FB8C9};
 
 function roundedBox(w,h,d,r,s){
   const g=new THREE.BoxGeometry(w,h,d,s,s,s), p=g.attributes.position, n=g.attributes.normal, v=new THREE.Vector3(), c=new THREE.Vector3(), dir=new THREE.Vector3(), cl=(x,a)=>Math.max(-a,Math.min(a,x));
@@ -127,6 +127,9 @@ export class View{
     if(e.startsWith('turbo')){ const lv=+e.slice(5); for(let n=0;n<14;n++) this.sparks.emit(new THREE.Vector3(p.x,p.y+.2,p.z),new THREE.Vector3((Math.random()-.5)*5,Math.random()*3,(Math.random()-.5)*5),SPARK[lv],.45,6); }
     if(e==='wall'){ for(let n=0;n<8;n++) this.puffs.emit(new THREE.Vector3(p.x,p.y,p.z),new THREE.Vector3((Math.random()-.5)*3,Math.random()*2,(Math.random()-.5)*3),0x6B6252,.5,0); }
     if(e==='finish'){ R.finishT=1; }
+    if(e==='trick'){ R.flipT=.45; for(let n=0;n<12;n++) this.sparks.emit(new THREE.Vector3(p.x,p.y+.8,p.z),new THREE.Vector3((Math.random()-.5)*4,Math.random()*3,(Math.random()-.5)*4),0xFFF3B0,.4,4); }
+    if(e==='honey'||e==='egg'){ const c=e==='honey'?0xFFC53A:0x9FDCFF; for(let n=0;n<14;n++) this.sparks.emit(new THREE.Vector3(p.x,p.y+1,p.z),new THREE.Vector3((Math.random()-.5)*3,1+Math.random()*2,(Math.random()-.5)*3),c,.5,2); }
+    if(e==='jump'){ for(let n=0;n<8;n++) this.puffs.emit(new THREE.Vector3(p.x,.2,p.z),new THREE.Vector3((Math.random()-.5)*3,.5,(Math.random()-.5)*3),0x8C7A5A,.45,0); }
   }
   // 角色身上的狀態：護盾泡泡、滾球、隱形、暈眩星星、減速、被飛彈鎖定
   status(R,dt){
@@ -143,6 +146,9 @@ export class View{
     R.warn.visible=k.warnT>0&&k.idx!==this.me&&Math.sin(R.t*14)>0;
     if(k.stunT>0&&Math.random()<.5){ const a=R.t*9; this.sparks.emit(new THREE.Vector3(p.x+Math.cos(a)*.6,p.y+1.9,p.z+Math.sin(a)*.6),new THREE.Vector3(0,.3,0),0xFFE27A,.35,0); }
     if(k.slowT>0&&Math.random()<.4) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1.2,p.y+.2,p.z+(Math.random()-.5)*1.2),new THREE.Vector3(0,1.2,0),0x9FB8FF,.5,0);
+    if(k.chargeT>0&&Math.random()<.8) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1.4,p.y+.3+Math.random()*1.4,p.z+(Math.random()-.5)*1.4),new THREE.Vector3(0,.8,0),Math.random()<.5?0xFF7A3A:0xFFD24A,.35,0);
+    if(k.yiT>0&&Math.random()<.5) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1,p.y+.4+Math.random()*1.4,p.z+(Math.random()-.5)*1),new THREE.Vector3(0,1.4,0),0xC8FF6B,.45,0);
+    if(R.flipT>0){ R.flipT=Math.max(0,R.flipT-dt); R.tilt.rotation.x=-(1-R.flipT/.45)*Math.PI*2; }
     if(k.lightSlowT>0&&Math.random()<.3) this.sparks.emit(new THREE.Vector3(p.x,p.y+1.2,p.z),new THREE.Vector3((Math.random()-.5),.5,(Math.random()-.5)),0x6BD13F,.5,2);
   }
   makeFx(o){
@@ -164,6 +170,13 @@ export class View{
       cap.position.y=.32; g.add(cap); const st=new THREE.Mesh(new THREE.CylinderGeometry(.13,.17,.34,8),new THREE.MeshStandardMaterial({color:0xF4EEDC})); st.position.y=.17; g.add(st);
       for(let i=0;i<6;i++){ const a=i/6*Math.PI*2, d=new THREE.Mesh(new THREE.SphereGeometry(.07,6,4),new THREE.MeshBasicMaterial({color:0xffffff})); d.position.set(Math.cos(a)*.3,.58,Math.sin(a)*.3); g.add(d); } M.spin=cap; }
     else if(o.kind==='poison'){ const d=new THREE.Mesh(new THREE.CircleGeometry(o.r,20),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false})); d.rotation.x=-Math.PI/2; d.position.y=.08; g.add(d); M.disc=d; }
+    else if(o.kind==='beartrap'){ const m=new THREE.MeshStandardMaterial({color:0x8A8F98,metalness:.7,roughness:.3});
+      [-1,1].forEach(sd=>{ const j=new THREE.Mesh(new THREE.TorusGeometry(.35,.06,4,10,Math.PI),m); j.rotation.set(0,Math.PI/2,sd*.5); g.add(j); }); glow(1,c);
+      M.chain=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,1,4),new THREE.MeshStandardMaterial({color:0x6B4A2E})); this.root.add(M.chain); }
+    else if(o.kind==='icewall'){ const m=em(c,{transparent:true,opacity:.85,emissiveIntensity:.5});
+      for(let i=0;i<3;i++){ const cr=new THREE.Mesh(new THREE.OctahedronGeometry(.7),m); cr.scale.set(.8,1.6+i*.3,.8); cr.position.set((i-1)*.7,.9+i*.1,0); cr.rotation.y=i; g.add(cr); } M.grow=true; }
+    else if(o.kind==='storm'){ const d=new THREE.Mesh(new THREE.RingGeometry(o.r-1,o.r,32),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); d.rotation.x=-Math.PI/2; d.position.y=.12; g.add(d); M.disc=d; }
+    else if(o.kind==='alpha'){ glow(3,c); }
     else if(o.kind==='tremor'){ const d=new THREE.Mesh(new THREE.RingGeometry(o.r-.8,o.r,32),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); d.rotation.x=-Math.PI/2; d.position.y=.1; g.add(d); M.disc=d; }
     return M;
   }
@@ -171,14 +184,16 @@ export class View{
     const alive=new Set();
     for(const o of race.fx){
       alive.add(o.id); let M=this.fxm.get(o.id); if(!M){ M=this.makeFx(o); this.fxm.set(o.id,M); this.root.add(M.g); }
-      M.g.position.set(o.x,o.kind==='shroom'||o.kind==='poison'||o.kind==='tremor'?.05:(o.y||1),o.z);
+      M.g.position.set(o.x,o.kind==='shroom'||o.kind==='poison'||o.kind==='tremor'||o.kind==='storm'||o.kind==='icewall'?.05:(o.y||1),o.z);
       if(o.dx!=null&&o.mode!=='static') M.g.rotation.y=Math.atan2(o.dx,o.dz);
       const c=FX_COL[o.kind], p=M.g.position;
       if(M.spin&&o.kind==='crystal') M.spin.rotation.z+=dt*8;
       if(o.kind==='shroom'){ const armed=!o.arm||o.age>=o.arm; M.g.scale.setScalar(armed?1+.05*Math.sin(t*4+o.id):Math.min(1,o.age/o.arm)); }
       if(o.kind==='poison'){ M.disc.material.opacity=.32*Math.min(1,(o.life-o.age)/1.2); if(Math.random()<.25) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*o.r,p.y+.2,p.z+(Math.random()-.5)*o.r),new THREE.Vector3(0,1,0),c,.9,0); }
+      if(M.grow){ M.g.scale.set(1,Math.min(1,o.age/.25)*Math.min(1,(o.life-o.age)/.4),1); }
+      if(o.kind==='storm'){ M.disc.rotation.z+=dt*2; if(Math.random()<.8){ const a=Math.random()*6.28, d=Math.random()*o.r; this.sparks.emit(new THREE.Vector3(p.x+Math.cos(a)*d,.5+Math.random()*3,p.z+Math.sin(a)*d),new THREE.Vector3(Math.sin(a)*3,-1.5,-Math.cos(a)*3),Math.random()<.5?0xFFFFFF:c,.7,0); } }
       if(o.kind==='tremor'){ M.disc.scale.setScalar(.85+.15*Math.sin(t*10)); if(Math.random()<.5){ const a=Math.random()*6.28; this.puffs.emit(new THREE.Vector3(p.x+Math.cos(a)*o.r*.9,.3,p.z+Math.sin(a)*o.r*.9),new THREE.Vector3(0,1.5,0),0x7A5A36,.5,0); } }
-      if(o.mode!=='static'&&o.mode!=='follow'&&c){ const n=o.kind==='trueshot'||o.kind==='rocket'||o.kind==='crystal'?3:1; for(let i=0;i<n;i++) this.sparks.emit(p.clone().add(new THREE.Vector3((Math.random()-.5)*.3,(Math.random()-.5)*.3,(Math.random()-.5)*.3)),new THREE.Vector3(-o.dx*3,.4,-o.dz*3),o.kind==='rocket'&&Math.random()<.5?0xFFD24A:c,.35,0); }
+      if(o.mode!=='static'&&o.mode!=='follow'&&o.mode!=='followT'&&c){ const n=o.kind==='trueshot'||o.kind==='rocket'||o.kind==='crystal'?3:1; for(let i=0;i<n;i++) this.sparks.emit(p.clone().add(new THREE.Vector3((Math.random()-.5)*.3,(Math.random()-.5)*.3,(Math.random()-.5)*.3)),new THREE.Vector3(-o.dx*3,.4,-o.dz*3),o.kind==='rocket'&&Math.random()<.5?0xFFD24A:c,.35,0); }
       if(M.chain){ const b=this.riders[o.owner].g.position, a=new THREE.Vector3(b.x,b.y+.9,b.z), d=p.clone().sub(a), L=d.length(); M.chain.position.copy(a).addScaledVector(d,.5); M.chain.scale.set(1,L,1); M.chain.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); }
     }
     for(const [id,M] of this.fxm) if(!alive.has(id)){ this.root.remove(M.g); if(M.chain) this.root.remove(M.chain); this.fxm.delete(id); }
@@ -189,7 +204,7 @@ export class View{
   // 技能相關事件
   onFx(ev){
     if(ev.e==='boom'){ const col=FX_COL[ev.kind]||0xFF8A2A;
-      if(ev.kind==='static'){ this.ring(ev.x,ev.z,ev.r,col); this.ring(ev.x,ev.z,ev.r*.6,0xFFFFFF); for(let n=0;n<40;n++){ const a=Math.random()*6.28, d=Math.random()*ev.r; this.sparks.emit(new THREE.Vector3(ev.x+Math.cos(a)*d,.3+Math.random()*2,ev.z+Math.sin(a)*d),new THREE.Vector3(0,3,0),col,.4,0); } }
+      if(ev.kind==='static'||ev.kind==='slam'){ this.ring(ev.x,ev.z,ev.r,col); this.ring(ev.x,ev.z,ev.r*.6,0xFFFFFF); for(let n=0;n<40;n++){ const a=Math.random()*6.28, d=Math.random()*ev.r; this.sparks.emit(new THREE.Vector3(ev.x+Math.cos(a)*d,.3+Math.random()*2,ev.z+Math.sin(a)*d),new THREE.Vector3(0,3,0),col,.4,0); } }
       else { this.flash(ev.x,ev.z,ev.r*.8,col,1); for(let n=0;n<40;n++){ const v=new THREE.Vector3(Math.random()-.5,Math.random()*.8,Math.random()-.5).normalize().multiplyScalar(4+Math.random()*6); this.sparks.emit(new THREE.Vector3(ev.x,1,ev.z),v,Math.random()<.5?col:0xFFFFFF,.6,6); } }
     }
     else if(ev.e==='fxhit'){ const col=ev.blocked?0xFFD86B:(FX_COL[ev.kind]||0xffffff); this.flash(ev.x,ev.z,ev.blocked?2:1.4,col,1); for(let n=0;n<18;n++){ const v=new THREE.Vector3(Math.random()-.5,Math.random(),Math.random()-.5).normalize().multiplyScalar(5); this.sparks.emit(new THREE.Vector3(ev.x,1,ev.z),v,col,.45,5); } }
@@ -206,7 +221,7 @@ export class View{
       R.yawOff+=((k.drift?k.drift*-.42:0)-R.yawOff)*Math.min(1,dt*10);
       g.rotation.y=k.heading+R.yawOff;
       const lean=k.drift?-k.drift*.42:-k.input.steer*.2*Math.min(1,k.speed/12);
-      R.roll+=(lean-R.roll)*Math.min(1,dt*8); R.tilt.rotation.z=R.roll; R.tilt.rotation.x=k.boostT>0?-.08:0;
+      R.roll+=(lean-R.roll)*Math.min(1,dt*8); R.tilt.rotation.z=R.roll; if(!(R.flipT>0)) R.tilt.rotation.x=k.boostT>0?-.08:0;
       R.shadow.position.set(k.pos.x,.05,k.pos.z); R.shadow.rotation.z=-g.rotation.y; R.shadow.material.opacity=Math.max(.25,1-k.y*.3);
       R.glow.material.opacity=.7+.25*Math.sin(R.t*9)+(k.boostT>0?.3:0);
       // 動作
@@ -231,7 +246,7 @@ export class View{
     });
     this.syncFx(race,dt,t); this.stepFlashes(dt);
     if(TR.sky) TR.sky.position.copy(this.cam.position);
-    this.sparks.update(dt); this.puffs.update(dt); TR.tick(t);
+    this.sparks.update(dt); this.puffs.update(dt); TR.tick(t); TR.tickFeatures(race.t,me,t);
     // 鏡頭
     const R=this.riders[this.me], p=R.g.position, f=new THREE.Vector3(Math.sin(me.heading),0,Math.cos(me.heading));
     let want, look;

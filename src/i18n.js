@@ -1,7 +1,7 @@
 // 中文／日本語。data-i 屬性的元素會自動套用。
 const STR={
   zh:{
-    title:'LOL 峽谷 GP', sub:'騎上懸浮滑板，在召喚峽谷用英雄技能互相干擾，搶先跑完 3 圈！',
+    title:'LOL 峽谷 GP', sub:'騎上懸浮滑板，在召喚峽谷用英雄技能互相干擾，搶先跑完全程！跳台飛在空中時按「甩尾」可以耍特技，落地加速。',
     yourName:'你的名字', namePh:'例如：周', pickChamp:'選擇英雄', pickSkin:'選擇造型',
     solo:'單人練習（對戰電腦）',
     online:'兩支手機對戰', onlineTitle:'兩支手機對戰', makeRoom:'開新房間', orJoin:'或輸入對方的房號加入', join:'加入', codePh:'4 位數房號',
@@ -15,10 +15,10 @@ const STR={
     result:'比賽結果', again:'再跑一次', home:'回標題', dnf:'未完成',
     passive:'被動', skill:'Q', ult:'R 大招',
     riot:'本作為依據 Riot Games「Legal Jibber Jabber」政策製作的非商業粉絲作品，使用了 Riot Games 擁有的素材，Riot Games 並未背書或贊助。英雄 3D 模型來自 modelviewer.lol，資料來自 Riot Data Dragon。',
-    quality:'畫質', qStd:'標準', qEco:'省電（解析度低、每秒 30 張）', classic:'經典', warn:'⚠ 飛彈鎖定你了！',
+    laps:'圈數', lapsIs:'{n} 圈', quality:'畫質', qStd:'標準', qEco:'省電（解析度低、每秒 30 張）', classic:'經典', warn:'⚠ 飛彈鎖定你了！',
   },
   ja:{
-    title:'LOL リフトGP', sub:'ホバーボードに乗って、サモナーズリフトでスキルを撃ち合いながら 3 周を競おう！',
+    title:'LOL リフトGP', sub:'ホバーボードに乗って、サモナーズリフトでスキルを撃ち合いながらゴールを目指そう！ジャンプ台で飛んでいる間に「ドリフト」を押すとトリックで着地ダッシュ。',
     yourName:'あなたの名前', namePh:'例：なつ', pickChamp:'チャンピオンを選ぶ', pickSkin:'スキンを選ぶ',
     solo:'ひとりで練習（CPU と対戦）',
     online:'スマホ2台で対戦', onlineTitle:'スマホ2台で対戦', makeRoom:'部屋を作る', orJoin:'または相手の部屋番号を入力して参加', join:'参加', codePh:'4桁の部屋番号',
@@ -32,7 +32,7 @@ const STR={
     result:'レース結果', again:'もう一度', home:'タイトルへ', dnf:'未完走',
     passive:'パッシブ', skill:'Q', ult:'R アルティメット',
     riot:'本作は Riot Games の「Legal Jibber Jabber」ポリシーに基づく非営利のファン作品で、Riot Games 所有の素材を使用しています。Riot Games は本作を推奨・後援していません。3D モデルは modelviewer.lol、データは Riot Data Dragon を利用しています。',
-    quality:'画質', qStd:'標準', qEco:'省電力（低解像度・30fps）', classic:'クラシック', warn:'⚠ ロケットに狙われている！',
+    laps:'周回数', lapsIs:'{n} 周', quality:'画質', qStd:'標準', qEco:'省電力（低解像度・30fps）', classic:'クラシック', warn:'⚠ ロケットに狙われている！',
   }
 };
 export let lang=(navigator.language||'').toLowerCase().startsWith('ja')?'ja':'zh';

@@ -7,7 +7,14 @@ export const TRACK_DEF={
   off:7,       // 路外草地寬度，之外是牆
   laps:3,
   pts:[[0,0],[0,-60],[10,-110],[40,-140],[90,-150],[140,-135],[165,-100],[160,-60],[130,-40],[110,-10],[120,30],[160,50],[200,40],[230,70],[225,120],[190,150],[130,160],[70,150],[30,120],[0,70]],
-  pads:[{f:.13,lat:0},{f:.53,lat:-3.5},{f:.79,lat:3.5}],
+  pads:[{f:.13,lat:0},{f:.53,lat:-3.5},{f:.79,lat:3.5},{f:.925,lat:-4},{f:.94,lat:-4},{f:.955,lat:-4}],   // 最後三塊是連續加速帶（走外側才吃得到）
+  // 賽道機關（參考瑪利歐賽車：加速跳台、會動的障礙、捷徑的取捨）
+  ramps:[{f:.392,lat:0,w:7,len:3,vy:8.5,kind:'ramp',boost:.5}],                                // 河道跳台：飛越河面與河道蟹
+  cones:[{f:.25,lat:5,vy:9},{f:.64,lat:-5,vy:9}],                                              // 爆破花：踩到彈飛＋小加速
+  pillars:[{f:.035,lat:3.2},{f:.565,lat:.5},{f:.68,lat:-3},{f:.855,lat:2.5},{f:.87,lat:-3.5}], // 石柱
+  honey:[{f:.17,lat:-5.5},{f:.5,lat:5},{f:.75,lat:-5.2}],                                     // 蜂蜜果：大招充能
+  minions:[{f0:.18,f1:.235,team:0},{f0:.695,f1:.75,team:1}],                                   // 小兵：逆向走過來
+  crab:{f:.405,amp:5.5,period:6},                                                              // 河道蟹：在河上左右橫走
   river:.405, baron:.33, dragon:.47,
   turrets:[{f:.06,side:-1,team:0},{f:.19,side:1,team:0},{f:.29,side:-1,team:0},{f:.61,side:1,team:1},{f:.73,side:-1,team:1},{f:.9,side:1,team:1}],
 };
@@ -28,6 +35,26 @@ export class Track{
       this.T.push(t); this.Nm.push(new THREE.Vector3(t.z,0,-t.x));   // Nm：行進方向的右手邊（從上往下看）
     }
     this.pads=def.pads.map(p=>({s:p.f*this.L,lat:p.lat,len:4,w:3.2}));
+    const at=(f,lat)=>{ const m=this.sample(f*this.L); return {x:m.pos.x+m.nrm.x*lat,z:m.pos.z+m.nrm.z*lat,s:f*this.L,lat}; };
+    this.ramps=(def.ramps||[]).map(r=>Object.assign({},r,{s:r.f*this.L})).concat((def.cones||[]).map(c=>({s:c.f*this.L,lat:c.lat,w:2.6,len:2.6,vy:c.vy,boost:.6,kind:'cone'})));
+    this.pillars=(def.pillars||[]).map(p=>Object.assign(at(p.f,p.lat),{r:1.1}));
+    this.honey=(def.honey||[]).map(h=>at(h.f,h.lat));
+    this.hz=[]; (def.minions||[]).forEach((m,w)=>{ for(let wave=0;wave<2;wave++) for(let j=0;j<2;j++) this.hz.push({kind:'minion',team:m.team,seg:m,wave,j,r:.7,x:0,z:0,h:0}); });
+    if(def.crab) this.hz.push({kind:'crab',r:1.3,x:0,z:0,h:0});
+    this.hzAI=this.hz.filter(o=>o.kind==='crab'||o.j===0);   // 電腦閃避用：一組小兵當成一個大障礙
+  }
+  // 會動的障礙：位置只由比賽時間決定 → 兩支手機不用傳資料也一樣
+  hazards(t){
+    const L=this.L, d=this.def;
+    for(const o of this.hz){
+      let s,lat;
+      if(o.kind==='minion'){ const s0=o.seg.f0*L, len=(o.seg.f1-o.seg.f0)*L, v=5, u=((t*v+o.wave*len/2)%len+len)%len;
+        const c=Math.sin(t*.35+o.wave*2+o.seg.f0*9)*3.5; s=s0+len-u+o.j*1.2; lat=c+(o.j?1:-1); o.cs=s0+len-u; o.cl=c; }
+      else { s=d.crab.f*L; lat=d.crab.amp*Math.sin(t*Math.PI*2/d.crab.period); }
+      const m=this.sample(s); o.x=m.pos.x+m.nrm.x*lat; o.z=m.pos.z+m.nrm.z*lat; o.s=((s%L)+L)%L; o.lat=lat; if(o.kind==='minion'){ o.as=((o.cs%L)+L)%L; o.alat=o.cl; o.ar=2.6; } else { o.as=o.s; o.alat=lat; o.ar=o.r; }
+      o.h=o.kind==='minion'?Math.atan2(-m.tan.x,-m.tan.z):Math.atan2(m.nrm.x,m.nrm.z)*(Math.cos(t*Math.PI*2/d.crab.period)>0?1:-1);
+    }
+    return this.hz;
   }
   idxAt(s){ const L=this.L; s=((s%L)+L)%L; return Math.floor(s/this.ds)%this.N; }
   sample(s){ const L=this.L; s=((s%L)+L)%L; const f=s/this.ds, i=Math.floor(f)%this.N, j=(i+1)%this.N, t=f-Math.floor(f);
@@ -128,8 +155,58 @@ export class Track{
     inst(new THREE.CylinderGeometry(.35,.5,2.4,6),lam(0x6B4A2E),trees,(o,t)=>{ o.position.set(t[0],1.2*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
     inst(new THREE.ConeGeometry(2.6,4.6,7),lam(0x2F6B3A),trees,(o,t)=>{ o.position.set(t[0],(2.4+2)*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
     inst(new THREE.ConeGeometry(1.9,3.4,7),lam(0x3B8046),trees,(o,t)=>{ o.position.set(t[0],(2.4+3.9)*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3]+1,0); });
+    this.buildFeatures(root, lam, arrow);
     this.buildSky(root); this.buildDecor(root);
     inst(new THREE.SphereGeometry(1.4,7,5),lam(0x2E7A5C),bushes,(o,t)=>{ o.position.set(t[0],.5,t[1]); o.scale.set(t[2]*1.4,t[2],t[2]*1.4); o.rotation.set(0,0,0); });
+  }
+  // 機關的外觀：跳台、爆破花、石柱、蜂蜜果、小兵、河道蟹
+  buildFeatures(root,lam,arrow){
+    const T=this;
+    this.ramps.forEach(r=>{
+      if(r.kind==='ramp'){ // 楔形跳台（黃黑斜紋＋箭頭）
+        const h=1.1, g=new THREE.BufferGeometry(), w=r.w/2, l=r.len/2;
+        const v=[-w,0,-l, w,0,-l, -w,h,l, w,h,l, -w,0,l, w,0,l];
+        g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,1,0,0,1,1,1,0,1,1,1],2));
+        g.setIndex([0,2,1, 1,2,3, 2,4,3, 3,4,5, 0,4,2, 1,3,5]); g.computeVertexNormals();
+        const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:arrow,side:THREE.DoubleSide})); this.place(m,r.s,r.lat,.02); root.add(m);
+        [-1,1].forEach(sd=>{ const post=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,2.4,6),lam(0x2A2F3A)); this.place(post,r.s+l,r.lat+sd*(w+.3),1.2); root.add(post);
+          const fl=new THREE.Mesh(new THREE.PlaneGeometry(.9,.5),new THREE.MeshBasicMaterial({color:0xFFB020,side:THREE.DoubleSide})); fl.position.set(sd*(w+.3),0,0); this.place(fl,r.s+l,r.lat+sd*(w+.75),2.1); root.add(fl); });
+      } else { // 爆破花：橘色花苞＋綠葉
+        const g=new THREE.Group(); this.place(g,r.s,r.lat,0);
+        for(let k=0;k<5;k++){ const lf=new THREE.Mesh(new THREE.SphereGeometry(.7,8,6),lam(0x3F8F3A)); lf.scale.set(1,.25,.5); const a=k/5*Math.PI*2; lf.position.set(Math.cos(a)*.7,.18,Math.sin(a)*.7); lf.rotation.y=-a; g.add(lf); }
+        const bud=new THREE.Mesh(new THREE.SphereGeometry(.6,12,10),new THREE.MeshLambertMaterial({color:0xFF7A2A,emissive:0xFF5A1A,emissiveIntensity:.5})); bud.position.y=.7; bud.scale.set(1,1.2,1); g.add(bud); (this.bobbers||(this.bobbers=[])).push(bud);
+        const ring=new THREE.Mesh(new THREE.RingGeometry(1.1,1.35,24),new THREE.MeshBasicMaterial({color:0xFFB020,transparent:true,opacity:.7,side:THREE.DoubleSide})); ring.rotation.x=-Math.PI/2; ring.position.y=.06; g.add(ring);
+        root.add(g); }
+    });
+    // 石柱：一次繪圖
+    if(this.pillars.length){ const m=new THREE.InstancedMesh(new THREE.CylinderGeometry(1.0,1.2,3.2,7),new THREE.MeshLambertMaterial({color:0x8C8A84,flatShading:true}),this.pillars.length), o=new THREE.Object3D();
+      this.pillars.forEach((p,k)=>{ o.position.set(p.x,1.6,p.z); o.rotation.set(0,k*1.3,0); o.scale.set(1,1,1); o.updateMatrix(); m.setMatrixAt(k,o.matrix); }); root.add(m);
+      const cap=new THREE.InstancedMesh(new THREE.ConeGeometry(.5,.9,6),new THREE.MeshLambertMaterial({color:0x7FD4FF,emissive:0x3FA0FF,emissiveIntensity:.6}),this.pillars.length);
+      this.pillars.forEach((p,k)=>{ o.position.set(p.x,3.65,p.z); o.rotation.set(0,k,0); o.updateMatrix(); cap.setMatrixAt(k,o.matrix); }); root.add(cap); }
+    // 蜂蜜果
+    this.honeyM=this.honey.map(h=>{ const g=new THREE.Group(); g.position.set(h.x,0,h.z);
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,.8,5),lam(0x5A8F3A)); st.position.y=.4; g.add(st);
+      const fr=new THREE.Mesh(new THREE.SphereGeometry(.42,12,10),new THREE.MeshLambertMaterial({color:0xFFC53A,emissive:0xFF9A1A,emissiveIntensity:.55})); fr.position.y=1; g.add(fr);
+      root.add(g); return {g,fr}; });
+    // 小兵與河道蟹
+    const blue=lam(0x3C8CE7), red=lam(0xE5484D), skin=lam(0xE8D2B0), dark=lam(0x2A2F3A);
+    this.hzM=this.hz.map(o=>{ const g=new THREE.Group();
+      if(o.kind==='minion'){ const b=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.5,4,8),o.team?red:blue); b.position.y=.62; g.add(b);
+        const hd=new THREE.Mesh(new THREE.SphereGeometry(.24,8,6),skin); hd.position.y=1.2; g.add(hd);
+        const hat=new THREE.Mesh(new THREE.ConeGeometry(.28,.36,6),o.team?red:blue); hat.position.y=1.45; g.add(hat);
+        const sw=new THREE.Mesh(new THREE.BoxGeometry(.06,.06,.6),dark); sw.position.set(.38,.7,.25); g.add(sw); }
+      else { const sh=new THREE.Mesh(new THREE.SphereGeometry(1.1,12,8,0,Math.PI*2,0,Math.PI/2),lam(0x5FB8C9)); sh.scale.set(1.2,.7,1); sh.position.y=.35; g.add(sh);
+        const pt=new THREE.Mesh(new THREE.TorusGeometry(.9,.12,6,16),lam(0xF2C14E)); pt.rotation.x=Math.PI/2; pt.position.y=.4; g.add(pt);
+        [-1,1].forEach(sd=>{ const cl=new THREE.Mesh(new THREE.SphereGeometry(.28,8,6),lam(0x3F8FA6)); cl.position.set(sd*1.1,.35,.6); g.add(cl);
+          for(let k=0;k<3;k++){ const lg=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.6,4),dark); lg.position.set(sd*(.8+k*.1),.2,-.4+k*.4); lg.rotation.z=sd*.9; g.add(lg); } }); }
+      root.add(g); return g; });
+  }
+  // 每幀：障礙位置（比賽時間）、蜂蜜果（這支手機的玩家吃過就暫時隱藏）
+  tickFeatures(raceT,me,t){
+    const hz=this.hazards(raceT);
+    hz.forEach((o,k)=>{ const g=this.hzM[k]; g.position.set(o.x,o.kind==='minion'?Math.abs(Math.sin(raceT*8+k))*.12:.02,o.z); g.rotation.y=o.h; });
+    (this.honeyM||[]).forEach((h,k)=>{ const on=!me||!(me.honey[k]>0); h.g.visible=on; if(on){ h.fr.position.y=1+Math.sin(t*2+k)*.12; h.fr.rotation.y=t; } });
+    (this.bobbers||[]).forEach((b,k)=>{ const u=1+.08*Math.sin(t*5+k); b.scale.set(u,1.2*u,u); });
   }
   // 天空（漸層圓頂，跟著鏡頭）與遠山剪影：各只有一個物體，幾乎不增加負擔
   buildSky(root){

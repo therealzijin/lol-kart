@@ -20,6 +20,9 @@ export const sfx={
   cast:(sl)=>{ if(sl==='r'){ tone(200,0,.5,'sawtooth',.08,800); tone(400,.05,.4,'triangle',.08,1200); } else tone(700,0,.15,'square',.06,1400); },
   boom:()=>{ tone(120,0,.5,'sawtooth',.12,40); tone(80,.02,.6,'square',.08,30); },
   block:()=>{ tone(1500,0,.25,'sine',.1); tone(2200,.05,.2,'sine',.08); },
+  jump:()=>{ tone(260,0,.35,'triangle',.1,700); },
+  trick:()=>{ [880,1175,1480].forEach((f,i)=>tone(f,i*.05,.12,'square',.05)); },
+  honey:()=>{ tone(660,0,.1,'sine',.12,990); tone(990,.08,.18,'sine',.1,1320); },
   landed:()=>{ tone(1100,0,.08,'triangle',.08); tone(1650,.06,.1,'triangle',.08); },
     finish:()=>[523,659,784,1047,784,1047].forEach((f,i)=>tone(f,i*.13,.25,'triangle',.13)),
 };

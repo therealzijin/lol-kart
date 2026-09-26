@@ -154,6 +154,8 @@ body.racing.portrait #rotate{display:flex}
         <div class="lbl" data-i="pickSkin"></div>
         <div class="skins" id="skins"></div>
         <div class="kit" id="kit"></div>
+        <div class="lbl" data-i="laps"></div>
+        <div class="seg" id="seg-laps" style="display:inline-flex"><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div>
         <div class="lbl" data-i="quality"></div>
         <div class="seg" id="seg-q" style="display:inline-flex"><button data-v="std" data-i="qStd"></button><button data-v="eco" data-i="qEco"></button></div>
         <button class="big go" id="b-solo" data-i="solo"></button>
@@ -179,6 +181,7 @@ body.racing.portrait #rotate{display:flex}
       <p id="o-status" style="text-align:center;font-size:13px;opacity:.8;margin:4px 0 10px"></p>
       <div id="o-players" class="ops"></div>
       <div id="o-cpu-row"><div class="lbl" data-i="cpuCount"></div><div class="seg" id="seg-cpu"><button data-v="0">0</button><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
+      <div id="o-laps-row"><div class="lbl" data-i="laps"></div><div class="seg" id="seg-olaps"><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div></div>
       <button class="big go" id="o-start" data-i="start"></button>
     </div>
     <div class="err" id="o-err"></div>
@@ -190,6 +193,6 @@ body.racing.portrait #rotate{display:flex}
 <div id="rotate"><div class="ph"></div><div data-i="rotate"></div></div>
 
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
-<script type="module" src="src/main.js?v=20260926191638"></script>
+<script type="module" src="src/main.js?v=20260926202236"></script>
 </body>
 </html>
