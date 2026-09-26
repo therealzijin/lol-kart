@@ -61,7 +61,7 @@ export class Kart{
     if(this.spinT>0) this.speed*=Math.exp(-2.4*dt);
     else if(this.stunT>0) this.speed*=Math.exp(-4*dt);
     else if(this.speed<max) this.speed=Math.min(max,this.speed+(this.boostT>0?K.ACC*2.2:K.ACC)*(this.champ==='Kled'?1.3:1)*dt*(1-this.speed/(max*1.15+.01)*.5));
-    else this.speed=Math.max(max,this.speed-(this.offroad?30:14)*dt);
+    else this.speed=Math.max(max,this.speed-(this.offroad?16:14)*dt);   // 草地減速放緩：原本 30 會瞬間掉速，同樣的方向盤突然轉得很急
     // 轉向與甩尾
     // 玩家的方向輸入稍微平滑，避免手指一抖就猛轉
     this.steerS=this.human?this.steerS+((control?I.steer:0)-this.steerS)*Math.min(1,dt*14):(control?I.steer:0);
@@ -79,6 +79,7 @@ export class Kart{
       }
     }
     if(!this.drift) turn=steer*K.TURN*(.45+.55*sp01)*(this.boostT>0?.85:1);
+    if(this.offroad&&this.champ!=='Teemo') turn*=.8;                 // 草地上速度較慢：轉向收一點，轉彎弧度才不會突然變小
     if(this.spinT>0) this.heading=this.spinH+(1-this.spinT/this.spinDur)*Math.PI*4;   // 被打中：轉兩圈後回到原方向
     else this.heading-=turn*dt*Math.max(sp01,.55);                // steer 正 = 右轉；速度很慢時也保有轉向力（撞牆後才轉得出來）
     // 速度向量（甩尾時側滑）

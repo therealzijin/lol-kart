@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926221734';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926221734';
-import {Track,TRACK_DEF} from './track.js?v=20260926221734';
-import {Race,DT} from './race.js?v=20260926221734';
-import {View} from './view.js?v=20260926221734';
-import {initInput,pollInput} from './input.js?v=20260926221734';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260926221734';
-import {initAI,driveAI} from './ai.js?v=20260926221734';
-import {KITS,cast} from './skills.js?v=20260926221734';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260926230010';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260926230010';
+import {Track,TRACK_DEF} from './track.js?v=20260926230010';
+import {Race,DT} from './race.js?v=20260926230010';
+import {View} from './view.js?v=20260926230010';
+import {initInput,pollInput} from './input.js?v=20260926230010';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260926230010';
+import {initAI,driveAI} from './ai.js?v=20260926230010';
+import {KITS,cast} from './skills.js?v=20260926230010';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -73,7 +73,7 @@ async function startRace(list,opts){
   const mine=race.karts[me];
   try{ await skinsOf(mine.champ); }catch(e){}
   ['q','r'].forEach(sl=>{ const b=$('b-'+sl), u=spellIcon(mine.champ,sl); b.style.backgroundImage=u?`url(${u})`:''; b.classList.toggle('icon',!!u); });
-  view.setup(track,race,me); drawMiniBase(); voiceReset(); preloadVoices([...new Set(race.karts.filter(k=>k.human).map(k=>k.champ))]);
+  view.setup(track,race,me); drawMiniBase(); voiceReset(); preloadVoices([...new Set(race.karts.map(k=>k.champ))]);
   if(opts.online){ $('load-t').textContent=T('waitOther'); $('load-s').textContent=''; opts.onLoaded&&opts.onLoaded(); }
   else go();
 }
@@ -100,27 +100,20 @@ function runSteps(){
   let n=0; while(acc>=DT&&n<16){ race.step(inputs); if(mode==='online') netTick(race); acc-=DT; n++; }
   if(n===16) acc=0;
 }
-/* ---------- 英雄語音：只有真人玩家（自己與連線對手）會說話，電腦不說，免得太吵 ---------- */
-let vT={}, vIdle=0;
-function voiceReset(){ vT={}; prevRank={}; vIdle=performance.now()+9000; }
-// k：哪台車；cat：類別；gap：這台車距離上一句至少幾秒；p：機率
-function sayK(k,cat,gap=3,p=1){ const K=race.karts[k]; if(!K||!K.human||Math.random()>p) return; const now=performance.now(), t=vT[k]||0; if(now-t<gap*1000) return; vT[k]=now; vIdle=now+14000+Math.random()*10000; voice(K.champ,cat); }
-function voiceTick(){ const now=performance.now(); if(race.phase!=='race'||now<vIdle) return; const hs=race.karts.filter(k=>k.human&&!k.finished&&k.spinT<=0); if(!hs.length) return; const k=hs[Math.floor(Math.random()*hs.length)];
-  vIdle=now+16000+Math.random()*12000; sayK(k.idx,k.rank===1?'taunt':'move',6); }   // 一陣子沒人說話：隨口說一句
+/* ---------- 英雄語音：只在「放技能」「被打中」時說話；電腦也會說，離自己越遠越小聲 ---------- */
+let vT={};
+function voiceReset(){ vT={}; }
+// 自己：每次都說；其他車：50 m 內才聽得到、同一台至少隔 5 秒、放 Q 只有六成機率開口
+function sayK(k,cat,gap){ const K=race.karts[k]; if(!K) return; const now=performance.now(), mine=k===me;
+  if(!mine){ gap=Math.max(gap,5); if(cat==='q'&&Math.random()>.6) return; }
+  if(now-(vT[k]||0)<gap*1000) return;
+  const d=mine?0:K.pos.distanceTo(race.karts[me].pos); if(d>50) return; vT[k]=now;
+  voice(K.champ,cat,{lane:mine?'me':'other',gain:mine?1.25:Math.max(.3,1-d/55)}); }
 function voiceEvent(ev){
-  const K=ev.k>=0?race.karts[ev.k]:null;
-  if(ev.e==='go') race.karts.forEach(k=>{ if(k.human&&k.idx===me) sayK(k.idx,'first',0); });
-  else if(ev.e==='cast') sayK(ev.k,ev.slot,ev.slot==='r'?0:4,ev.slot==='r'?1:.6);
-  else if(ev.e==='landed') sayK(ev.k,'kill',4,.5);
-  else if(ev.e==='hit') sayK(ev.k,'death',5,.5);
-  else if(ev.e==='final') sayK(ev.k,'attack',0);
-  else if(ev.e==='finish'&&K) sayK(ev.k,K.rank===1?'taunt':K.rank<=3?'laugh':'recall',0);
-  else if(ev.e==='trickBoost') sayK(ev.k,'laugh',6,.35);
+  if(ev.e==='cast') sayK(ev.k,ev.slot,ev.slot==='r'?0:3);
+  else if(ev.e==='hit') sayK(ev.k,'death',3);
 }
-let prevRank={};
-function rankVoice(){ race.karts.forEach(k=>{ if(!k.human||k.finished) return; const p=prevRank[k.idx]; if(p&&p>1&&k.rank===1&&race.phase==='race') sayK(k.idx,'taunt',10,.8); prevRank[k.idx]=k.rank; }); }
 function flushEvents(hidden){
-  if(!hidden){ voiceTick(); rankVoice(); }
   for(const ev of race.events){
     if(!hidden) voiceEvent(ev);
     if(hidden){ if(ev.e==='done') setTimeout(showResults,1600); continue; }
@@ -200,7 +193,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260926221734';
+import * as Online from './online.js?v=20260926230010';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },
