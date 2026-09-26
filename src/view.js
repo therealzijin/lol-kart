@@ -4,8 +4,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import {byId,ROSTER} from './roster.js?v=20260926173616';
-import {K} from './kart.js?v=20260926173616';
+import {byId,ROSTER} from './roster.js?v=20260926175029';
+import {K} from './kart.js?v=20260926175029';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -131,6 +131,8 @@ export class View{
   // 角色身上的狀態：護盾泡泡、滾球、隱形、暈眩星星、減速、被飛彈鎖定
   status(R,dt){
     const k=R.k, p=R.g.position;
+    // 被打後的無敵時間：一閃一閃
+    R.tilt.visible=!(k.immuneT>0&&k.spinT<=0&&k.stunT<=0&&k.y<=.01&&Math.floor(R.t*14)%2===1);
     R.shield.visible=k.shieldT>0; if(R.shield.visible){ R.shield.material.opacity=.18+.1*Math.sin(R.t*8); R.shield.scale.setScalar(1+.04*Math.sin(R.t*5)); }
     if(R.ball){ const on=k.ballT>0; R.ball.visible=on; R.body.visible=!on; if(on) R.ball.rotation.x+=dt*k.speed*.9; }
     const want=k.invisT>0?(k.idx===this.me?.4:.12):1;

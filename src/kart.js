@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 
 export const K={
-  MAX:27, ACC:13, OFFROAD:.55, BOOST:1.42, TURN:1.85, DRIFT_TURN:2.35, GRIP:9, DRIFT_GRIP:2.6,
+  MAX:27, ACC:13, OFFROAD:.55, BOOST:1.42, TURN:1.6, DRIFT_TURN:2.2, GRIP:9, DRIFT_GRIP:2.6,
   R:.95,                                   // 碰撞半徑
   CHARGE:[.7,1.45,2.3], TURBO:[.7,1.15,1.7], // 甩尾集氣門檻（秒）與對應加速秒數
 };
@@ -16,7 +16,7 @@ export class Kart{
     this.drift=0; this.driftT=0; this.level=0; this.boostT=0; this.spinT=0; this.slowT=0; this.stunT=0; this.bumpT=0; this.hopT=0;
     this.offroad=false; this.rubber=1; this.lastI=-1; this.s=0; this.lap=0; this.half=true; this.progress=0;
     this.finished=false; this.finishTime=0; this.rank=idx+1; this.events=[];
-    this.qCD=0; this.rCharge=15; this.shieldT=0; this.blindT=0; this.invisT=0; this.pasT=0; this.ballT=0; this.huntT=0; this.lightSlowT=0; this.trailT=0; this.warnT=0;
+    this.qCD=0; this.rCharge=15; this.shieldT=0; this.immuneT=0; this.steerS=0; this.blindT=0; this.invisT=0; this.pasT=0; this.ballT=0; this.huntT=0; this.lightSlowT=0; this.trailT=0; this.warnT=0;
   }
   place(track,s,lat){
     const m=track.sample(s); this.pos.set(m.pos.x+m.nrm.x*lat,0,m.pos.z+m.nrm.z*lat);
@@ -29,6 +29,7 @@ export class Kart{
   // 所有技能的效果都走這裡：eff = {spin, knock, slow, stun, blind}。回傳 'block'（被擋）或 true（命中）
   hit(eff){
     if(this.finished) return false;
+    if(this.immuneT>0) return 'immune';                 // 剛被打過：短暫無敵，避免被連續控場
     const block=()=>{ this.events.push('block'); if(this.champ==='Sivir'&&this.blockedBySpell){ this.boost(1.3); this.rCharge=Math.min(100,this.rCharge+20); } this.blockedBySpell=false; return 'block'; };
     if(this.shieldT>0){ this.shieldT=0; this.blockedBySpell=true; return block(); }
     if(this.champ==='Blitzcrank'&&this.pasT<=0){ this.pasT=20; return block(); }       // 被動：魔力屏障
@@ -38,12 +39,13 @@ export class Kart{
     if(eff.stun){ this.stunT=Math.max(this.stunT,eff.stun); this.drift=0; this.level=0; }
     if(eff.blind) this.blindT=Math.max(this.blindT,eff.blind);
     this.rCharge=Math.min(100,this.rCharge+8);
+    const cc=Math.max(this.spinT,this.stunT,this.vy>0?this.vy/12:0); this.immuneT=Math.max(this.immuneT,cc+1.1);
     this.events.push('hit'); return true;
   }
 
   update(dt,track,racing){
     const I=this.input, T=track;
-    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
+    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD','immuneT'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
     const control=racing&&!this.finished&&this.spinT<=0&&this.stunT<=0&&this.y<=.01;
     // 目標速度
     let max=K.MAX*this.rubber;
@@ -57,7 +59,9 @@ export class Kart{
     else if(this.speed<max) this.speed=Math.min(max,this.speed+(this.boostT>0?K.ACC*2.2:K.ACC)*dt*(1-this.speed/(max*1.15+.01)*.5));
     else this.speed=Math.max(max,this.speed-(this.offroad?30:14)*dt);
     // 轉向與甩尾
-    let turn=0; const steer=control?I.steer:0, sp01=Math.min(1,this.speed/10);
+    // 玩家的方向輸入稍微平滑，避免手指一抖就猛轉
+    this.steerS=this.human?this.steerS+((control?I.steer:0)-this.steerS)*Math.min(1,dt*14):(control?I.steer:0);
+    let turn=0; const steer=this.steerS, sp01=Math.min(1,this.speed/10);
     if(control&&I.drift&&!this.drift&&Math.abs(steer)>.25&&this.speed>11){ this.drift=Math.sign(steer); this.driftT=0; this.level=0; this.hopT=.18; this.events.push('drift'); }
     if(this.drift){
       if(!control||this.speed<8){ this.drift=0; this.level=0; }

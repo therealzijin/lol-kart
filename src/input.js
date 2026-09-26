@@ -7,7 +7,8 @@ const $=id=>document.getElementById(id);
 export function initInput(){
   const stick=$('stick'), knob=$('knob'), dot=knob.querySelector('i');
   stick.addEventListener('touchstart',e=>{ e.preventDefault(); const t=e.changedTouches[0]; stickId=t.identifier; ox=t.clientX; oy=t.clientY; knob.style.display='block'; knob.style.left=ox+'px'; knob.style.top=oy+'px'; dot.style.transform='translate(-50%,-50%)'; },{passive:false});
-  stick.addEventListener('touchmove',e=>{ e.preventDefault(); for(const t of e.changedTouches) if(t.identifier===stickId){ const dx=Math.max(-60,Math.min(60,t.clientX-ox)); input.steer=Math.abs(dx)<6?0:dx/60; dot.style.transform=`translate(calc(-50% + ${dx}px),-50%)`; } },{passive:false});
+  // 方向：±80px、中間 8px 不反應，並用反應曲線（小幅度只微調，推到底才急轉）
+  stick.addEventListener('touchmove',e=>{ e.preventDefault(); for(const t of e.changedTouches) if(t.identifier===stickId){ const dx=Math.max(-80,Math.min(80,t.clientX-ox)), v=Math.max(0,Math.min(1,(Math.abs(dx)-8)/72)); input.steer=Math.sign(dx)*Math.pow(v,1.7); dot.style.transform=`translate(calc(-50% + ${dx}px),-50%)`; } },{passive:false});
   const end=e=>{ for(const t of e.changedTouches) if(t.identifier===stickId){ stickId=null; input.steer=0; knob.style.display='none'; } };
   stick.addEventListener('touchend',end); stick.addEventListener('touchcancel',end);
   const hold=(id,key)=>{ const b=$(id);

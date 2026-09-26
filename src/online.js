@@ -1,16 +1,16 @@
 // 兩支手機對戰：大廳、開賽同步、狀態同步（每秒 20 次）、技能重播、斷線處理。
 // 分工：每支手機負責自己的車；房主另外負責電腦。
 // 對方的車：用「最後收到的狀態＋速度×(經過時間＋單程延遲)」推算它現在在哪，再平滑靠過去（不再顯示過去的位置）。
-import {Net} from './net.js?v=20260926173616';
-import {T,lang} from './i18n.js?v=20260926173616';
-import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260926173616';
-import {cast,remoteHit} from './skills.js?v=20260926173616';
-import {initAI} from './ai.js?v=20260926173616';
+import {Net} from './net.js?v=20260926175029';
+import {T,lang} from './i18n.js?v=20260926175029';
+import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260926175029';
+import {cast,remoteHit} from './skills.js?v=20260926175029';
+import {initAI} from './ai.js?v=20260926175029';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const SEND_EVERY=2;                     // 每幾個模擬步送一次（60/2 = 30Hz）
-const F=['x','z','y','vy','heading','speed','vx','vz','drift','level','driftT','lap','s','half','fin','ft','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','steer','offroad','trailT','lightSlowT','bumpT'];
+const F=['x','z','y','vy','heading','speed','vx','vz','drift','level','driftT','lap','s','half','fin','ft','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','steer','offroad','trailT','lightSlowT','bumpT','immuneT'];
 
 let net=null, G=null, me=-1, cpuN=2, opp=null, state='idle', readySelf=false, readyOpp=false, pendingStart=null, lastCfg=null;
 const rem={};                            // idx → {L:最新狀態, tr:收到時間, st:對方送出時間, angV:轉向速度}
@@ -19,7 +19,7 @@ let lastN=0, sendN=0;
 /* ---------- 狀態打包／套用 ---------- */
 const r3=v=>Math.round(v*1000)/1000;
 function pack(k){ return [k.idx,r3(k.pos.x),r3(k.pos.z),r3(k.y),r3(k.vy),r3(k.heading),r3(k.speed),r3(k.vel.x),r3(k.vel.z),k.drift,k.level,r3(k.driftT),k.lap,r3(k.s),k.half?1:0,k.finished?1:0,r3(k.finishTime||0),
-  r3(k.boostT),r3(k.spinT),r3(k.stunT),r3(k.slowT),r3(k.shieldT),r3(k.invisT),r3(k.ballT),r3(k.hopT),r3(k.input.steer),k.offroad?1:0,r3(k.trailT),r3(k.lightSlowT),r3(k.bumpT)]; }
+  r3(k.boostT),r3(k.spinT),r3(k.stunT),r3(k.slowT),r3(k.shieldT),r3(k.invisT),r3(k.ballT),r3(k.hopT),r3(k.input.steer),k.offroad?1:0,r3(k.trailT),r3(k.lightSlowT),r3(k.bumpT),r3(k.immuneT)]; }
 function unpack(a){ const o={}; F.forEach((f,i)=>o[f]=a[i+1]); return o; }
 const lerpA=(a,b,u)=>{ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*u; };
 export function applyRemote(race,k){
@@ -33,7 +33,7 @@ export function applyRemote(race,k){
   k.pos.set(tx+R.ox,0,tz+R.oz); k.heading=th+R.oh;
   k.y=(L.y>0||L.vy>0)?Math.max(0,L.y+L.vy*age-12*age*age):0;
   k.vel.set(L.vx,0,L.vz); k.speed=L.speed; k.vy=L.vy;
-  ['drift','level','driftT','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','trailT','lightSlowT','bumpT'].forEach(f=>k[f]=L[f]);
+  ['drift','level','driftT','boostT','spinT','stunT','slowT','shieldT','invisT','ballT','hopT','trailT','lightSlowT','bumpT','immuneT'].forEach(f=>k[f]=L[f]||0);
   k.offroad=!!L.offroad; k.input.steer=L.steer; k.lap=L.lap; k.s=L.s; k.half=!!L.half;
   const q=race.track.nearest(k.pos,k.lastI); k.lastI=q.i; k.calcProgress(race.track);
   if(L.fin&&!k.finished) race.markFinished(k,L.ft);

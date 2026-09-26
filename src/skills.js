@@ -5,7 +5,7 @@
 // 連線對戰的原則：
 // - 施放：施放者那支手機決定目標，把 {seq, 位置, 方向, 目標} 傳給對方，對方用同樣的程式「重播」，產生同樣 id 的物件。
 // - 命中：只判定「這支手機負責的車」（k.local）。命中後 report()：通知對方移除彈道、幫施放者加充能、播特效。
-import {K} from './kart.js?v=20260926173616';
+import {K} from './kart.js?v=20260926175029';
 
 const R_RATE=2.2, R_ON_HIT=15;           // 大招每秒自然充能、打中別人加多少
 let nextId=1;
@@ -41,11 +41,11 @@ function railShot(race,k,kind,opt){
 // 範圍效果：只作用在這支手機負責的車
 function boom(race,x,z,r,eff,owner,kind,skip){ let first=true;
   race.events.push({k:-1,e:'boom',x,z,r,kind:kind||'boom'});
-  for(const o of race.karts){ if(!o.local||o.idx===owner||o.idx===skip||o.finished) continue;
+  for(const o of race.karts){ if(!o.local||o.idx===owner||o.idx===skip||o.finished||o.immuneT>0) continue;
     if((o.pos.x-x)**2+(o.pos.z-z)**2<r*r){ const res=o.hit(eff); report(race,{owner,victim:o.idx,res,kind:kind||'boom',x:o.pos.x,z:o.pos.z,mul:first?1:.3}); if(res===true) first=false; } }
 }
 function applyCredit(race,h){ if(h.res!==true||h.owner<0) return; const k=race.karts[h.owner]; if(!k||!k.local) return;
-  k.rCharge=Math.min(100,k.rCharge+R_ON_HIT*(h.mul==null?1:h.mul)); k.events.push('landed'); if(h.refund) k.qCD*=.35; }
+  k.rCharge=Math.min(100,k.rCharge+R_ON_HIT*(h.mul==null?1:h.mul)); k.events.push('landed'); if(h.refund) k.qCD*=.6; }
 // 這支手機判定到命中 → 自己處理 + 通知對方
 function report(race,h){
   applyCredit(race,h);
@@ -81,7 +81,7 @@ export const KITS={
     ai(race,k){ return {q:!!ahead(race,k,45,.12), r:near(race,k,9).length>0}; },
   },
   Ezreal:{
-    q:{cd:4.5, cast(race,k){ shot(race,k,'mystic',{v:95,r:1,life:.7,eff:{spin:.9},refund:true}); }},
+    q:{cd:6, cast(race,k){ shot(race,k,'mystic',{v:95,r:1,life:.7,eff:{spin:.9},refund:true}); }},
     r:{cast(race,k){ railShot(race,k,'trueshot',{v:88,r:3,life:3,pierce:true,eff:{spin:1.2,slow:1}}); }},
     ai(race,k){ return {q:!!ahead(race,k,55,.1), r:!!ahead(race,k,160,null)}; },
   },
@@ -101,8 +101,8 @@ export const KITS={
     ai(race,k){ return {q:!!ahead(race,k,22,.35), r:near(race,k,9).length>0}; },
   },
   Ashe:{
-    q:{cd:6, cast(race,k){ [-.3,-.15,0,.15,.3].forEach(a=>shot(race,k,'arrow',{ang:a,v:64,r:.9,life:.75,eff:{slow:1.8,spin:.35},credit:.3})); }},
-    r:{cast(race,k){ railShot(race,k,'crystal',{v:70,r:2.2,life:4,eff:{stun:1.6,slow:2},boomR:5,boomEff:{slow:2}}); }},
+    q:{cd:6, cast(race,k){ [-.18,0,.18].forEach(a=>shot(race,k,'arrow',{ang:a,v:64,r:.9,life:.75,eff:{slow:1.8,spin:.35},credit:.4})); }},
+    r:{cast(race,k){ railShot(race,k,'crystal',{v:70,r:2.2,life:4,eff:{stun:1.2,slow:2},boomR:5,boomEff:{slow:2}}); }},
     ai(race,k){ return {q:!!ahead(race,k,40,.3), r:!!ahead(race,k,150,null)}; },
   },
 };
@@ -130,8 +130,10 @@ export function cast(race,k,slot,rep){
 export function aiCast(race,k){
   const A=k.ai; if(!A) return; A.castWait=(A.castWait||0)-1/60; if(A.castWait>0) return;
   const want=KITS[k.champ].ai(race,k);
-  if(want.q&&k.qCD<=0&&Math.random()<.25){ cast(race,k,'q'); A.castWait=.6; }
-  else if(want.r&&k.rCharge>=100&&Math.random()<.12){ cast(race,k,'r'); A.castWait=1; }
+  // 場上已經有很多技能在飛時先不放，避免整群人一直被打
+  const flying=race.fx.filter(o=>o.mode!=='static'&&o.mode!=='follow'&&o.owner!==k.idx).length;
+  if(want.q&&k.qCD<=0&&flying<3&&Math.random()<.12){ if(cast(race,k,'q')) k.qCD*=1.4; A.castWait=1.5; }
+  else if(want.r&&k.rCharge>=100&&flying<4&&Math.random()<.08){ cast(race,k,'r'); A.castWait=2.5; }
 }
 
 /* ---------- 每步更新 ---------- */
@@ -164,6 +166,7 @@ export function stepSkills(race,dt){
     if(o.arm&&o.age<o.arm) continue;
     for(const k of race.karts){
       if(!k.local||k.finished||(k.idx===o.owner&&o.mode!=='static')||o.hit.includes(k.idx)) continue;
+      if(k.immuneT>0&&!o.zone) continue;
       if(o.kind==='shroom'&&k.idx===o.owner) continue;
       const rr=o.r+K.R; if((k.pos.x-o.x)**2+(k.pos.z-o.z)**2>rr*rr||Math.abs((k.y||0)-(o.mode==='static'||o.mode==='follow'?0:.3))>2.2) continue;
       if(o.zone){ k.slowT=Math.max(k.slowT,o.zone.slow); continue; }                       // 區域：在裡面就減速
@@ -182,6 +185,6 @@ export function stepSkills(race,dt){
 export function onCollide(race,a,b){
   for(const [x,y] of [[a,b],[b,a]]) if(x.ballT>0){
     if(x.local) x.ballT=0;
-    if(y.local){ const res=y.hit({knock:8,spin:1}); report(race,{owner:x.idx,victim:y.idx,res,kind:'ball',x:y.pos.x,z:y.pos.z}); }
+    if(y.local&&y.immuneT<=0){ const res=y.hit({knock:8,spin:1}); report(race,{owner:x.idx,victim:y.idx,res,kind:'ball',x:y.pos.x,z:y.pos.z}); }
   }
 }
