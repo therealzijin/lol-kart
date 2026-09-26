@@ -8,9 +8,9 @@ const STR={
     rotate:'請把手機轉成橫向', steerHint:'← 左半邊滑動轉彎 →', drift:'甩尾',
     lap:'第 {l} / {n} 圈', finalLap:'最後一圈！', go:'GO!', finish:'抵達終點！',
     result:'比賽結果', again:'再跑一次', home:'回標題', dnf:'未完成',
-    passive:'被動', skill:'技能 Q', ult:'大招 R', soon:'（技能會在下一步加入）',
+    passive:'被動', skill:'Q', ult:'R 大招',
     riot:'本作為依據 Riot Games「Legal Jibber Jabber」政策製作的非商業粉絲作品，使用了 Riot Games 擁有的素材，Riot Games 並未背書或贊助。英雄 3D 模型來自 modelviewer.lol，資料來自 Riot Data Dragon。',
-    classic:'經典',
+    classic:'經典', warn:'⚠ 飛彈鎖定你了！',
   },
   ja:{
     title:'LOL リフトGP', sub:'ホバーボードに乗って、サモナーズリフトでスキルを撃ち合いながら 3 周を競おう！',
@@ -20,9 +20,9 @@ const STR={
     rotate:'スマホを横向きにしてください', steerHint:'← 左半分をスライドしてハンドル →', drift:'ドリフト',
     lap:'ラップ {l} / {n}', finalLap:'ファイナルラップ！', go:'GO!', finish:'ゴール！',
     result:'レース結果', again:'もう一度', home:'タイトルへ', dnf:'未完走',
-    passive:'パッシブ', skill:'スキル Q', ult:'アルティメット R', soon:'（スキルは次のステップで追加）',
+    passive:'パッシブ', skill:'Q', ult:'R アルティメット',
     riot:'本作は Riot Games の「Legal Jibber Jabber」ポリシーに基づく非営利のファン作品で、Riot Games 所有の素材を使用しています。Riot Games は本作を推奨・後援していません。3D モデルは modelviewer.lol、データは Riot Data Dragon を利用しています。',
-    classic:'クラシック',
+    classic:'クラシック', warn:'⚠ ロケットに狙われている！',
   }
 };
 export let lang=(navigator.language||'').toLowerCase().startsWith('ja')?'ja':'zh';

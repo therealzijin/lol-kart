@@ -16,6 +16,7 @@ export class Kart{
     this.drift=0; this.driftT=0; this.level=0; this.boostT=0; this.spinT=0; this.slowT=0; this.stunT=0; this.bumpT=0; this.hopT=0;
     this.offroad=false; this.rubber=1; this.lastI=-1; this.s=0; this.lap=0; this.half=true; this.progress=0;
     this.finished=false; this.finishTime=0; this.rank=idx+1; this.events=[];
+    this.qCD=0; this.rCharge=15; this.shieldT=0; this.blindT=0; this.invisT=0; this.pasT=0; this.ballT=0; this.huntT=0; this.lightSlowT=0; this.trailT=0; this.warnT=0;
   }
   place(track,s,lat){
     const m=track.sample(s); this.pos.set(m.pos.x+m.nrm.x*lat,0,m.pos.z+m.nrm.z*lat);
@@ -24,17 +25,31 @@ export class Kart{
   }
   fwd(){ return new THREE.Vector3(Math.sin(this.heading),0,Math.cos(this.heading)); }
   boost(sec){ this.boostT=Math.max(this.boostT,sec); this.events.push('boost'); }
-  spin(sec){ if(this.shieldT>0){ this.shieldT=0; this.events.push('block'); return false; } if(this.spinT<=0){ this.spinH=this.heading; this.spinDur=sec; } this.spinT=Math.max(this.spinT,sec); this.spinDur=Math.max(this.spinDur,this.spinT); this.drift=0; this.level=0; this.events.push('hit'); return true; }
-  knockup(h){ if(this.shieldT>0){ this.shieldT=0; this.events.push('block'); return false; } this.vy=Math.max(this.vy,h); this.spin(.9); return true; }
+  _spin(sec){ if(this.spinT<=0){ this.spinH=this.heading; this.spinDur=sec; } this.spinT=Math.max(this.spinT,sec); this.spinDur=Math.max(this.spinDur,this.spinT); this.drift=0; this.level=0; }
+  // 所有技能的效果都走這裡：eff = {spin, knock, slow, stun, blind}。回傳 'block'（被擋）或 true（命中）
+  hit(eff){
+    if(this.finished) return false;
+    const block=()=>{ this.events.push('block'); if(this.champ==='Sivir'&&this.blockedBySpell){ this.boost(1.3); this.rCharge=Math.min(100,this.rCharge+20); } this.blockedBySpell=false; return 'block'; };
+    if(this.shieldT>0){ this.shieldT=0; this.blockedBySpell=true; return block(); }
+    if(this.champ==='Blitzcrank'&&this.pasT<=0){ this.pasT=20; return block(); }       // 被動：魔力屏障
+    if(eff.knock){ this.vy=Math.max(this.vy,eff.knock); this._spin(Math.max(.9,eff.spin||0)); }
+    if(eff.spin) this._spin(eff.spin);
+    if(eff.slow) this.slowT=Math.max(this.slowT,eff.slow);
+    if(eff.stun){ this.stunT=Math.max(this.stunT,eff.stun); this.drift=0; this.level=0; }
+    if(eff.blind) this.blindT=Math.max(this.blindT,eff.blind);
+    this.rCharge=Math.min(100,this.rCharge+8);
+    this.events.push('hit'); return true;
+  }
 
   update(dt,track,racing){
     const I=this.input, T=track;
-    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
+    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
     const control=racing&&!this.finished&&this.spinT<=0&&this.stunT<=0&&this.y<=.01;
     // 目標速度
     let max=K.MAX*this.rubber;
-    if(this.boostT>0) max*=K.BOOST; else if(this.offroad) max*=K.OFFROAD;
-    if(this.slowT>0) max*=.6;
+    if(this.boostT>0) max*=K.BOOST; else if(this.offroad) max*=this.champ==='Teemo'?.9:K.OFFROAD;   // 提摩被動：草地不減速
+    if(this.ballT>0) max*=1.22; if(this.huntT>0) max*=1.12;
+    if(this.slowT>0) max*=.6; else if(this.lightSlowT>0) max*=.9;
     if(!racing) max=0;
     if(this.finished) max*=.55;
     if(this.spinT>0) this.speed*=Math.exp(-2.4*dt);
@@ -47,7 +62,7 @@ export class Kart{
     if(this.drift){
       if(!control||this.speed<8){ this.drift=0; this.level=0; }
       else if(!I.drift){ // 放開：依集氣等級加速
-        if(this.level>0){ this.boost(K.TURBO[this.level-1]*(this.driftBonus||1)); this.events.push('turbo'+this.level); }
+        if(this.level>0){ this.boost(K.TURBO[this.level-1]*(this.champ==='Sivir'?1.3:1)); this.rCharge=Math.min(100,this.rCharge+3*this.level); this.events.push('turbo'+this.level); }
         this.drift=0; this.level=0;
       } else {
         this.driftT+=dt*(1+.6*Math.max(0,steer*this.drift));   // 往甩尾方向壓得越深，集氣越快

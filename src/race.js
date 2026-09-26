@@ -1,6 +1,7 @@
 // 比賽進行：起跑格、倒數、固定步長模擬、碰撞、名次、完賽。只有邏輯，沒有畫面。
 import {Kart,collide} from './kart.js';
 import {initAI,driveAI} from './ai.js';
+import {stepSkills,cast,aiCast,onCollide} from './skills.js';
 
 export const DT=1/60;
 function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
@@ -8,7 +9,8 @@ function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; r
 export class Race{
   constructor(track,entrants,seed){
     this.track=track; this.rand=rng(seed||Date.now()); this.laps=track.laps;
-    this.karts=entrants.map((e,i)=>new Kart(i,e));
+    this.karts=entrants.map((e,i)=>new Kart(i,e)); this.fx=[];
+    this.karts.forEach(k=>{ if(k.champ==='Rammus') k.heavy=2.5; });
     // 起跑格：兩兩一排、交錯，人類排在後面（要超車才好玩）
     const order=[...this.karts].sort((a,b)=>(a.human?1:0)-(b.human?1:0));
     order.forEach((k,g)=>{ const row=Math.floor(g/2), col=g%2; k.place(track,track.L-7-row*6.5-col*2.5,col?3.4:-3.4); if(k.cpu) initAI(k,this.rand); });
@@ -23,11 +25,13 @@ export class Race{
     const racing=this.phase!=='countdown';
     if(racing&&this.phase!=='done') this.time+=DT;
     for(const k of this.karts){
-      if(k.human){ const I=inputs[k.idx]; if(I){ k.input.steer=I.steer; k.input.drift=I.drift; } }
-      else if(k.cpu&&racing) driveAI(k,T,this.karts,this.t);
+      if(k.human){ const I=inputs[k.idx]; if(I){ k.input.steer=I.steer; k.input.drift=I.drift;
+          if(I.q&&!k.prevQ) cast(this,k,'q'); if(I.r&&!k.prevR) cast(this,k,'r'); k.prevQ=I.q; k.prevR=I.r; } }   // 按下的瞬間才施放
+      else if(k.cpu&&racing){ driveAI(k,T,this.karts,this.t); aiCast(this,k); }
       k.update(DT,T,racing);
     }
-    for(let a=0;a<this.karts.length;a++) for(let b=a+1;b<this.karts.length;b++) collide(this.karts[a],this.karts[b]);
+    for(let a=0;a<this.karts.length;a++) for(let b=a+1;b<this.karts.length;b++) if(collide(this.karts[a],this.karts[b])) onCollide(this,this.karts[a],this.karts[b]);
+    stepSkills(this,DT);
     for(const k of this.karts){
       if(!k.finished&&k.lap>this.laps){ k.finished=true; k.finishTime=this.time; this.order.push(k.idx); k.events.push('finish'); }
       k.events.forEach(e=>{
@@ -37,7 +41,8 @@ export class Race{
     }
     this.rank();
     // 所有人類都完賽後，再等電腦最多 12 秒
-    if(this.phase==='race'&&this.karts.filter(k=>k.human).every(k=>k.finished)){ this.phase='finish'; this.endT=this.time+12; }
+    const hs=this.karts.filter(k=>k.human);
+    if(this.phase==='race'&&(hs.length?hs.every(k=>k.finished):this.karts.every(k=>k.finished))){ this.phase='finish'; this.endT=this.time+12; }
     if(this.phase==='finish'&&(this.karts.every(k=>k.finished)||this.time>=this.endT)){ this.phase='done'; this.events.push({k:-1,e:'done'}); }
   }
   rank(){

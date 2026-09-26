@@ -7,6 +7,7 @@ import {View} from './view.js';
 import {initInput,pollInput} from './input.js';
 import {sfx,engine,stopEngine,unlockAudio} from './audio.js';
 import {initAI,driveAI} from './ai.js';
+import {KITS,cast} from './skills.js';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -15,12 +16,13 @@ const show=id=>document.querySelectorAll('.screen').forEach(s=>s.classList.toggl
 
 /* ---------- 標題：選英雄與造型 ---------- */
 let ver=null, pick={champ:ls.get('lk-champ')||'Teemo', skin:ls.get('lk-skin')||null};
-const skinCache={};
+const skinCache={}, spellCache={};
 async function ddVer(){ if(!ver){ try{ ver=(await (await fetch(DD+'/api/versions.json')).json())[0]; }catch(e){ ver='16.19.1'; } } return ver; }
 async function skinsOf(cid){
   if(skinCache[cid]) return skinCache[cid];
   const v=await ddVer(), get=l=>fetch(`${DD}/cdn/${v}/data/${l}/champion/${cid}.json`).then(r=>r.json()).then(j=>j.data[cid]);
   const [zh,ja]=await Promise.all([get('zh_TW'),get('ja_JP')]); const jn={}; ja.skins.forEach(s=>jn[s.num]=s.name);
+  spellCache[cid]={zh:zh.spells,ja:ja.spells,pzh:zh.passive,pja:ja.passive};
   return skinCache[cid]=zh.skins.filter(s=>s.parentSkin==null).map(s=>({id:s.id,num:s.num,n:{zh:s.name==='default'?`${'經典'} ${zh.name}`:s.name,ja:jn[s.num]&&jn[s.num]!=='default'?jn[s.num]:`クラシック ${ja.name}`}}));
 }
 async function renderRoster(){
@@ -35,10 +37,14 @@ async function renderSkins(){
   if(cid!==pick.champ) return;
   if(!pick.skin||!list.some(s=>s.id===pick.skin)) pick.skin=list[0].id;
   box.innerHTML=list.map(s=>`<button class="sk ${s.id===pick.skin?'sel':''}" data-s="${s.id}"><img src="${DD}/cdn/img/champion/tiles/${cid}_${s.num}.jpg" alt="" loading="lazy"><span>${esc(s.n[lang])}</span></button>`).join('');
+  renderKit();
   box.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{ pick.skin=b.dataset.s; ls.set('lk-skin',pick.skin); box.querySelectorAll('.sk').forEach(x=>x.classList.toggle('sel',x===b)); });
 }
-function renderKit(){ const c=byId(pick.champ), k=c.kit;
-  $('kit').innerHTML=`<div><b>${T('passive')}</b>　${esc(k.p[lang])}</div><div><b>${T('skill')}</b>　${esc(k.q[lang])}</div><div><b>${T('ult')}</b>　${esc(k.r[lang])}</div><div style="opacity:.55;font-size:11px;margin-top:4px">${T('soon')}</div>`; }
+function spellIcon(cid,slot){ const sp=spellCache[cid]; if(!sp||!ver) return ''; const c=byId(cid), s=sp.zh[slot==='q'?c.qi:c.ri]; return `${DD}/cdn/${ver}/img/spell/${s.image.full}`; }
+function spellName(cid,slot){ const sp=spellCache[cid]; if(!sp) return ''; const c=byId(cid), L=lang==='ja'?sp.ja:sp.zh; return L[slot==='q'?c.qi:c.ri].name; }
+function renderKit(){ const c=byId(pick.champ), k=c.kit, sp=spellCache[c.id];
+  const row=(slot,label,txt)=>`<div style="display:flex;gap:8px;align-items:center;margin:3px 0">${slot&&sp?`<img src="${spellIcon(c.id,slot)}" style="width:30px;height:30px;border-radius:6px;flex:none">`:''}<div><b>${label}${slot&&sp?`・${esc(spellName(c.id,slot))}`:''}</b><br>${esc(txt)}</div></div>`;
+  $('kit').innerHTML=row(null,T('passive'),k.p[lang])+row('q',T('skill'),k.q[lang])+row('r',T('ult'),k.r[lang]); }
 
 /* ---------- 比賽 ---------- */
 let view=null, track=null, race=null, me=0, acc=0, lastT=0, raf=0, bannerT=0;
@@ -62,6 +68,8 @@ async function startSolo(){
   const res=await view.loadModels(urls,p=>$('load-bar').style.width=Math.round(p*100)+'%');
   if(res.some(r=>r.status==='rejected')){ $('load-s').textContent=T('loadFail'); await new Promise(r=>setTimeout(r,900)); }
   race=new Race(track,list); me=0;
+  try{ await skinsOf(pick.champ); }catch(e){}
+  ['q','r'].forEach(sl=>{ const b=$('b-'+sl), u=spellIcon(pick.champ,sl); b.style.backgroundImage=u?`url(${u})`:''; b.classList.toggle('icon',!!u); });
   view.setup(track,race,me); drawMiniBase();
   show(''); $('hud').classList.add('on'); $('pad').classList.add('on'); document.body.classList.add('racing');
   acc=0; lastT=performance.now(); cancelAnimationFrame(raf); raf=requestAnimationFrame(loop);
@@ -75,13 +83,18 @@ function loop(now){
   let n=0; while(acc>=DT&&n<8){ race.step(inputs); acc-=DT; n++; }
   if(n===8) acc=0;
   for(const ev of race.events){
-    if(ev.k>=0) view.onEvent(ev.k,ev.e);
+    if(ev.k>=0&&typeof ev.e==='string') view.onEvent(ev.k,ev.e);
+    if(['boom','fxhit','fizzle','cast'].includes(ev.e)) view.onFx(ev);
     const mine=ev.k===me;
     if(ev.e==='count'){ center(ev.n); sfx.beep(); }
     else if(ev.e==='go'){ center(T('go')); sfx.go(); setTimeout(()=>center(''),700); }
     else if(mine&&ev.e==='final'){ banner(T('finalLap')); sfx.final(); }
     else if(mine&&ev.e==='lap'&&race.karts[me].lap>1) sfx.lap();
     else if(mine&&ev.e.startsWith('turbo')) sfx.turbo(+ev.e.slice(5));
+    else if(ev.e==='cast'&&mine) sfx.cast(ev.slot);
+    else if(ev.e==='boom') sfx.boom();
+    else if(mine&&ev.e==='block') sfx.block();
+    else if(mine&&ev.e==='landed') sfx.landed();
     else if(mine&&ev.e==='hit') sfx.hit();
     else if(mine&&ev.e==='wall') sfx.wall();
     else if(mine&&ev.e==='finish'){ center(T('finish')); sfx.finish(); }
@@ -102,6 +115,12 @@ function hud(dt){
   $('h-time').textContent=fmt(k.finished?k.finishTime:race.time);
   $('h-spd').textContent=Math.round(k.speed*3.6)+' km/h';
   if(bannerT>0){ bannerT-=dt; if(bannerT<=0) $('h-banner').textContent=''; }
+  const kit=KITS[k.champ];
+  $('b-q').querySelector('.cd').style.transform=`scaleY(${Math.min(1,k.qCD/kit.q.cd).toFixed(3)})`;
+  $('b-r').querySelector('.cd').style.transform=`scaleY(${(1-k.rCharge/100).toFixed(3)})`;
+  $('b-q').classList.toggle('ready',k.qCD<=0); $('b-r').classList.toggle('ready',k.rCharge>=100);
+  $('blind').style.opacity=Math.min(1,k.blindT/.6).toFixed(2);
+  $('h-warn').style.display=k.warnT>0?'':'none';
   drawMini();
 }
 /* ---------- 小地圖 ---------- */
@@ -139,4 +158,4 @@ $('b-solo').onclick=startSolo;
 $('b-online').onclick=()=>{ $('t-err').textContent=T('onlineSoon'); };
 initInput(); applyLang();
 // 除錯用
-window.__lk={get race(){ return race; }, get view(){ return view; }, start:startSolo, Race, Track, TRACK_DEF, initAI, driveAI, auto:false};
+window.__lk={get race(){ return race; }, get view(){ return view; }, start:startSolo, Race, Track, TRACK_DEF, initAI, driveAI, cast, auto:false, pick};

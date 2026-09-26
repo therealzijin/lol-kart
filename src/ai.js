@@ -19,6 +19,7 @@ export function driveAI(k,track,karts,t){
   let steer=-diff*2.8;
   // 靠近路邊時往中間修（lat 正 = 在左側，要往右 = steer 正）
   const edge=half-1.2; if(Math.abs(q.lat)>edge) steer+=Math.sign(q.lat)*(Math.abs(q.lat)-edge)*.45;
+  if(k.blindT>0) steer+=Math.sin(t*6+A.wob)*.7;                               // 被致盲：方向亂飄
   I.steer=Math.max(-1,Math.min(1,steer));
   // 甩尾：急彎、速度夠、方向一致時才甩
   if(!k.drift&&bend>.7&&k.speed>18&&Math.sign(I.steer)===-turnDir&&Math.abs(q.lat)<half-1.5) A.holdDrift=.8+bend*.6;

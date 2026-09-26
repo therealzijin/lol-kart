@@ -13,7 +13,11 @@ export const sfx={
   turbo:(lv)=>{ tone(300+lv*120,0,.35,'sawtooth',.07,900+lv*300); },
   boost:()=>tone(220,0,.5,'sawtooth',.06,660),
   hit:()=>{ tone(180,0,.3,'square',.1,70); }, wall:()=>tone(90,0,.12,'square',.08,60),
-  finish:()=>[523,659,784,1047,784,1047].forEach((f,i)=>tone(f,i*.13,.25,'triangle',.13)),
+  cast:(sl)=>{ if(sl==='r'){ tone(200,0,.5,'sawtooth',.08,800); tone(400,.05,.4,'triangle',.08,1200); } else tone(700,0,.15,'square',.06,1400); },
+  boom:()=>{ tone(120,0,.5,'sawtooth',.12,40); tone(80,.02,.6,'square',.08,30); },
+  block:()=>{ tone(1500,0,.25,'sine',.1); tone(2200,.05,.2,'sine',.08); },
+  landed:()=>{ tone(1100,0,.08,'triangle',.08); tone(1650,.06,.1,'triangle',.08); },
+    finish:()=>[523,659,784,1047,784,1047].forEach((f,i)=>tone(f,i*.13,.25,'triangle',.13)),
 };
 // 引擎：每幀以玩家速度更新
 export function engine(speed,drifting,active){
