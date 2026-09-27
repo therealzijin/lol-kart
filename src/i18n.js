@@ -17,7 +17,7 @@ const STR={
     riot:'本作為依據 Riot Games「Legal Jibber Jabber」政策製作的非商業粉絲作品，使用了 Riot Games 擁有的素材，Riot Games 並未背書或贊助。英雄 3D 模型來自 modelviewer.lol，資料來自 Riot Data Dragon。',
     laps:'圈數', lapsIs:'{n} 圈', fs:'⛶ 全螢幕', a2hsT:'加入主畫面就能全螢幕', a2hsB:'iPhone 的 Safari 不允許網頁自己切成全螢幕。把遊戲加到主畫面後，從圖示打開就沒有網址列和分頁列，畫面大很多：',
     a2hs1:'點 Safari 下方（或網址列旁）的「分享」按鈕', a2hs2:'往下找「加入主畫面」', a2hs3:'之後從主畫面的「峽谷GP」圖示打開', ok:'知道了',
-    quality:'畫質', qStd:'標準', qEco:'省電（解析度低、每秒 30 張）', classic:'經典', warn:'⚠ 飛彈鎖定你了！',
+    quality:'畫質', qHq:'高畫質（陰影・草叢，較耗電）', qStd:'標準', qEco:'省電（解析度低、每秒 30 張）', classic:'經典', warn:'⚠ 飛彈鎖定你了！',
   },
   ja:{
     title:'LOL リフトGP', sub:'ホバーボードに乗って、サモナーズリフトでスキルを撃ち合いながらゴールを目指そう！ジャンプ台で飛んでいる間に「ドリフト」を押すとトリックで着地ダッシュ。',
@@ -36,7 +36,7 @@ const STR={
     riot:'本作は Riot Games の「Legal Jibber Jabber」ポリシーに基づく非営利のファン作品で、Riot Games 所有の素材を使用しています。Riot Games は本作を推奨・後援していません。3D モデルは modelviewer.lol、データは Riot Data Dragon を利用しています。',
     laps:'周回数', lapsIs:'{n} 周', fs:'⛶ 全画面', a2hsT:'ホーム画面に追加すると全画面に', a2hsB:'iPhone の Safari はページから全画面にできません。ホーム画面に追加してアイコンから開くと、アドレスバーやタブが消えて画面が広くなります：',
     a2hs1:'Safari の「共有」ボタンをタップ', a2hs2:'「ホーム画面に追加」を選ぶ', a2hs3:'ホーム画面の「峽谷GP」アイコンから開く', ok:'OK',
-    quality:'画質', qStd:'標準', qEco:'省電力（低解像度・30fps）', classic:'クラシック', warn:'⚠ ロケットに狙われている！',
+    quality:'画質', qHq:'高画質（影・草むら、電池消費大）', qStd:'標準', qEco:'省電力（低解像度・30fps）', classic:'クラシック', warn:'⚠ ロケットに狙われている！',
   }
 };
 export let lang=(navigator.language||'').toLowerCase().startsWith('ja')?'ja':'zh';

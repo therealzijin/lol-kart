@@ -21,6 +21,14 @@ export const TRACK_DEF={
 const TEAM=[0x3C8CE7,0xE5484D];
 
 function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
+// 照片材質（Poly Haven CC0，見 tex/CREDITS.txt）：只載一次，每場比賽共用
+const TEX={}, TL=new THREE.TextureLoader();
+function photo(name,rx,ry,srgb=true){ const k=name+rx+'x'+ry; if(!TEX[k]){ const t=TL.load('tex/'+name); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rx,ry); t.anisotropy=8; if(srgb) t.colorSpace=THREE.SRGBColorSpace; TEX[k]=t; } return TEX[k]; }
+// 大範圍的明暗／色偏（世界座標雜訊），讓重複的貼圖不那麼明顯
+function macroTint(mat,scale,lo,hi){ mat.onBeforeCompile=sh=>{
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;').replace('#include <begin_vertex>','#include <begin_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xyz;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;\nfloat mh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat mn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mh(i),mh(i+vec2(1,0)),f.x),mix(mh(i+vec2(0,1)),mh(i+1.),f.x),f.y);}')
+    .replace('#include <map_fragment>',`#include <map_fragment>\n{ float n=mn(vWP.xz/${scale.toFixed(1)})*.65+mn(vWP.xz/${(scale/3.7).toFixed(1)})*.35; diffuseColor.rgb*=mix(vec3(${lo}),vec3(${hi}),n); }`); }; return mat; }
 function canvasTex(w,h,draw,rep){ const c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; if(rep){ t.wrapS=t.wrapT=THREE.RepeatWrapping; } return t; }
 
 export class Track{
@@ -72,14 +80,16 @@ export class Track{
   }
 
   /* ---------- 場景 ---------- */
-  build(root){
+  build(root,q){
+    this.q=q||'std'; const hq=this.q==='hq';
     const N=this.N, P=this.P, Nm=this.Nm, half=this.half, off=this.off, L=this.L, ds=this.ds, R=rng(20260926);
     const lam=(c,o)=>new THREE.MeshLambertMaterial(Object.assign({color:c},o||{}));
     // 地面（草地）
     const grass=canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#4E8A3E'; g.fillRect(0,0,w,h); for(let k=0;k<2600;k++){ const v=R(); g.fillStyle=v<.33?'#5C9A48':v<.66?'#447C36':'#63A34E'; g.fillRect(R()*w,R()*h,2+R()*3,2+R()*3); } },true);
     grass.repeat.set(140,140);
     const cx=P.reduce((a,p)=>a+p.x,0)/N, cz=P.reduce((a,p)=>a+p.z,0)/N; this.center=new THREE.Vector3(cx,0,cz);
-    const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),lam(0xffffff,{map:grass})); ground.rotation.x=-Math.PI/2; ground.position.set(cx,0,cz); root.add(ground);
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),macroTint(lam(0x9FD86A,{map:photo('grass.jpg',230,230)}),38,'.8,.9,.72','1.12,1.14,.96'));
+    ground.receiveShadow=hq; ground.rotation.x=-Math.PI/2; ground.position.set(cx,0,cz); root.add(ground);
     // 路面
     const road=canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#9A8C74'; g.fillRect(0,0,w,h);
       for(let y=0;y<h;y+=32) for(let x=((y/32)%2)*24;x<w;x+=48){ g.fillStyle=`hsl(35,${10+R()*10}%,${46+R()*10}%)`; g.fillRect(x+2,y+2,44,28); }
@@ -89,7 +99,11 @@ export class Track{
     for(let i=0;i<=N;i++){ const k=i%N, p=P[k], n=Nm[k], v=i*ds/8;
       rp.push(p.x-n.x*half,.03,p.z-n.z*half, p.x+n.x*half,.03,p.z+n.z*half); ru.push(0,v,1,v);
       if(i<N){ const a=i*2; ri.push(a,a+2,a+1, a+1,a+2,a+3); } }
-    root.add(this.strip(rp,ru,ri,lam(0xffffff,{map:road})));
+    const roadMat=macroTint(lam(0xffffff,Object.assign({map:photo('road.jpg',4,2.4)},hq?{normalMap:photo('road_n.jpg',4,2.4,false),normalScale:new THREE.Vector2(1.2,1.2)}:{})),26,'.8,.78,.74','1.1,1.06,1.0');
+    const roadM=this.strip(rp,ru,ri,roadMat); roadM.receiveShadow=hq; root.add(roadM);
+    // 路邊白線（照片材質換掉後另外畫）
+    for(const side of [-1,1]){ const lp=[], lu=[], li=[]; for(let i=0;i<=N;i++){ const k=i%N, p=P[k], n=Nm[k], a=(half-.75)*side, b=(half-.4)*side; lp.push(p.x+n.x*a,.045,p.z+n.z*a, p.x+n.x*b,.045,p.z+n.z*b); lu.push(0,0,1,0); if(i<N){ const q2=i*2; if(side>0) li.push(q2,q2+2,q2+1, q2+1,q2+2,q2+3); else li.push(q2,q2+1,q2+2, q2+1,q2+3,q2+2); } }
+      root.add(this.strip(lp,lu,li,lam(0xF4EEDC))); }
     // 路肩：前半圈藍白、後半圈紅白
     const curb=(inner,outer,y)=>{ const pos=[], col=[], c=new THREE.Color(), W=new THREE.Color(0xffffff);
       for(let i=0;i<N;i++){ const j=(i+1)%N, team=i<N/2?0:1, on=Math.floor(i*ds/3)%2===0; c.setHex(on?TEAM[team]:0xF4F1EA);
@@ -100,13 +114,14 @@ export class Track{
       return new THREE.Mesh(g,lam(0xffffff,{vertexColors:true})); };
     root.add(curb(half,half+1.1,.04));
     // 牆（石牆）
-    const wallP=[], wallI=[]; let vi=0; const WH=1.1;
+    const wallP=[], wallI=[], wallUV=[]; let vi=0; const WH=1.1;
     for(const side of [-1,1]) for(let i=0;i<=N;i++){ const k=i%N, p=P[k], n=Nm[k], d=(half+off)*side;
-      wallP.push(p.x+n.x*d,0,p.z+n.z*d, p.x+n.x*d,WH,p.z+n.z*d, p.x+n.x*(d+side*.8),WH,p.z+n.z*(d+side*.8));
+      wallP.push(p.x+n.x*d,0,p.z+n.z*d, p.x+n.x*d,WH,p.z+n.z*d, p.x+n.x*(d+side*.8),WH,p.z+n.z*(d+side*.8)); const u=i*this.ds/2.2; wallUV.push(u,0, u,.5, u,.86);
       if(i<N){ const a=vi+i*3, b=a+3; if(side<0) wallI.push(a,a+1,b, b,a+1,b+1, a+1,a+2,b+1, b+1,a+2,b+2); else wallI.push(a,b,a+1, b,b+1,a+1, a+1,b+1,a+2, b+1,b+2,a+2); }
       if(i===N) vi+=(N+1)*3; }
     const wg=new THREE.BufferGeometry(); wg.setAttribute('position',new THREE.Float32BufferAttribute(wallP,3)); wg.setIndex(wallI); wg.computeVertexNormals();
-    root.add(new THREE.Mesh(wg,lam(0x8B8378,{side:THREE.DoubleSide})));
+    wg.setAttribute('uv',new THREE.Float32BufferAttribute(wallUV,2)); wg.computeVertexNormals();
+    const wallM=new THREE.Mesh(wg,lam(0xD8D2C8,{side:THREE.DoubleSide,map:photo('wall.jpg',1,1)})); wallM.castShadow=wallM.receiveShadow=hq; root.add(wallM);
     // 起跑線與拱門
     const chk=canvasTex(128,32,(g)=>{ for(let x=0;x<16;x++) for(let y=0;y<4;y++){ g.fillStyle=(x+y)%2?'#111':'#fff'; g.fillRect(x*8,y*8,8,8); } });
     const sl=new THREE.Mesh(new THREE.PlaneGeometry(this.w,2),lam(0xffffff,{map:chk})); this.place(sl,0,0,.05); sl.rotateX(-Math.PI/2); root.add(sl);
@@ -152,9 +167,16 @@ export class Track{
       if(q.dist>half+off+3.5&&!pitNear) trees.push([x,z,.8+R()*.7,R()*6]); }
     for(let i=0;i<N;i+=5){ if(R()<.45) continue; const side=R()<.5?-1:1, d=half+off+1.8+R()*1.5, p=P[i], n=Nm[i]; bushes.push([p.x+n.x*d*side,p.z+n.z*d*side,.8+R()*.6]); }
     const inst=(geo,mat,list,fn)=>{ const m=new THREE.InstancedMesh(geo,mat,list.length), o=new THREE.Object3D(); list.forEach((t,k)=>{ fn(o,t); o.updateMatrix(); m.setMatrixAt(k,o.matrix); }); root.add(m); };
-    inst(new THREE.CylinderGeometry(.35,.5,2.4,6),lam(0x6B4A2E),trees,(o,t)=>{ o.position.set(t[0],1.2*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
-    inst(new THREE.ConeGeometry(2.6,4.6,7),lam(0x2F6B3A),trees,(o,t)=>{ o.position.set(t[0],(2.4+2)*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
-    inst(new THREE.ConeGeometry(1.9,3.4,7),lam(0x3B8046),trees,(o,t)=>{ o.position.set(t[0],(2.4+3.9)*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3]+1,0); });
+    // 樹：三層不規則的樹冠＋每棵不同的綠色（一次繪圖）
+    const jag=(g,amt)=>{ const p=g.attributes.position, rr=rng(g.uuid.length*7+p.count); for(let i=0;i<p.count;i++){ const y=p.getY(i); if(Math.abs(p.getX(i))+Math.abs(p.getZ(i))<1e-3) continue; const k=1+(rr()-.5)*amt; p.setX(i,p.getX(i)*k); p.setZ(i,p.getZ(i)*k); p.setY(i,y+(rr()-.5)*amt*.8); } g.computeVertexNormals(); return g; };
+    const tint=trees.map(()=>new THREE.Color().setHSL(.27+R()*.08,.42+R()*.2,.24+R()*.1));
+    const inst2=(geo,mat,list,fn,col)=>{ const m=new THREE.InstancedMesh(geo,mat,list.length), o=new THREE.Object3D(); list.forEach((t,k)=>{ fn(o,t); o.updateMatrix(); m.setMatrixAt(k,o.matrix); if(col) m.setColorAt(k,col(k)); }); m.castShadow=hq; root.add(m); return m; };
+    const leaf=new THREE.MeshLambertMaterial({color:0xffffff,flatShading:true});
+    inst2(new THREE.CylinderGeometry(.3,.48,2.4,7),lam(0x6B4A2E),trees,(o,t)=>{ o.position.set(t[0],1.2*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); });
+    inst2(jag(new THREE.ConeGeometry(2.8,3.6,9,2),.28),leaf,trees,(o,t)=>{ o.position.set(t[0],3.9*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3],0); },k=>tint[k]);
+    inst2(jag(new THREE.ConeGeometry(2.2,3.1,9,2),.28),leaf,trees,(o,t)=>{ o.position.set(t[0],5.5*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3]+1,0); },k=>tint[k].clone().offsetHSL(0,0,.04));
+    inst2(jag(new THREE.ConeGeometry(1.5,2.5,8,2),.25),leaf,trees,(o,t)=>{ o.position.set(t[0],7*t[2],t[1]); o.scale.setScalar(t[2]); o.rotation.set(0,t[3]+2,0); },k=>tint[k].clone().offsetHSL(0,0,.08));
+    if(hq) this.buildTufts(root);
     this.buildFeatures(root, lam, arrow);
     this.buildSky(root); this.buildDecor(root);
     inst(new THREE.SphereGeometry(1.4,7,5),lam(0x2E7A5C),bushes,(o,t)=>{ o.position.set(t[0],.5,t[1]); o.scale.set(t[2]*1.4,t[2],t[2]*1.4); o.rotation.set(0,0,0); });
@@ -209,11 +231,25 @@ export class Track{
     (this.bobbers||[]).forEach((b,k)=>{ const u=1+.08*Math.sin(t*5+k); b.scale.set(u,1.2*u,u); });
   }
   // 天空（漸層圓頂，跟著鏡頭）與遠山剪影：各只有一個物體，幾乎不增加負擔
+  // 高畫質：路邊一叢叢的草（兩片交叉的半透明面，一次繪圖）
+  buildTufts(root){
+    const R=rng(99), half=this.half, off=this.off, list=[];
+    const tex=canvasTex(64,128,(g,w,h)=>{ g.clearRect(0,0,w,h); for(let k=0;k<22;k++){ const x=6+R()*52, lean=(R()-.5)*18, top=10+R()*40; const gr=g.createLinearGradient(0,h,0,top); gr.addColorStop(0,'#2F5A22'); gr.addColorStop(1,R()<.5?'#8FC45A':'#6FAE45'); g.strokeStyle=gr; g.lineWidth=2+R()*2.5; g.lineCap='round'; g.beginPath(); g.moveTo(x,h); g.quadraticCurveTo(x+lean*.3,(h+top)/2,x+lean,top); g.stroke(); } });
+    for(let i=0;i<this.N;i++){ const p=this.P[i], n=this.Nm[i]; for(let k=0;k<4;k++){ if(R()<.25) continue; const side=R()<.5?-1:1, d=half+.9+R()*(off-1.6); list.push([p.x+n.x*d*side,p.z+n.z*d*side,.6+R()*.7,R()*3]); } }
+    const pos=[], uv=[], idx=[]; [0,Math.PI/2].forEach((a,j)=>{ const c=Math.cos(a)*.55, s2=Math.sin(a)*.55, b=j*4; pos.push(-c,0,-s2, c,0,s2, c,.9,s2, -c,.9,-s2); uv.push(0,0,1,0,1,1,0,1); idx.push(b,b+1,b+2, b,b+2,b+3); });
+    const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); geo.setIndex(idx); geo.computeVertexNormals();
+    const m=new THREE.InstancedMesh(geo,new THREE.MeshLambertMaterial({map:tex,alphaTest:.45,side:THREE.DoubleSide}),list.length), o=new THREE.Object3D();
+    list.forEach((t,k)=>{ o.position.set(t[0],0,t[1]); o.scale.set(t[2],t[2]*(.8+R()*.5),t[2]); o.rotation.set(0,t[3],0); o.updateMatrix(); m.setMatrixAt(k,o.matrix); }); root.add(m);
+  }
   buildSky(root){
     const R=rng(77), sky=new THREE.SphereGeometry(640,24,12), col=[], p=sky.attributes.position, c=new THREE.Color();
     const top=new THREE.Color(0x4F9BE0), hor=new THREE.Color(0xCFEBFA), low=new THREE.Color(0xB8DDC4);
     for(let i=0;i<p.count;i++){ const y=p.getY(i)/640; if(y>=0) c.copy(hor).lerp(top,Math.pow(y,.6)); else c.copy(hor).lerp(low,Math.min(1,-y*4)); col.push(c.r,c.g,c.b); }
     sky.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    // 雲：幾片柔邊的雲朵貼圖（永遠面向鏡頭，不吃霧）
+    { const cl=canvasTex(256,128,(g,w,h)=>{ for(let k=0;k<14;k++){ const x=40+R()*176, y=50+R()*40, r=18+R()*34, gr=g.createRadialGradient(x,y,0,x,y,r); gr.addColorStop(0,'rgba(255,255,255,.95)'); gr.addColorStop(.6,'rgba(255,255,255,.55)'); gr.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle=gr; g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill(); } });
+      const C=this.center; this.clouds=[]; for(let k=0;k<16;k++){ const a=k/16*Math.PI*2+R()*.3, d=260+R()*200, sp=new THREE.Sprite(new THREE.SpriteMaterial({map:cl,fog:false,depthWrite:false,transparent:true,opacity:.75+R()*.2}));
+        sp.position.set(C.x+Math.cos(a)*d,110+R()*90,C.z+Math.sin(a)*d); const sc=90+R()*90; sp.scale.set(sc,sc*.45,1); sp.renderOrder=-1; root.add(sp); this.clouds.push(sp); } }
     this.sky=new THREE.Mesh(sky,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide,fog:false,depthWrite:false})); this.sky.renderOrder=-1; root.add(this.sky);
     // 遠山：一圈低多邊形山峰，合併成一個網格
     const pos=[], cc=[], ring=46, C=this.center;

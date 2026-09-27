@@ -4,8 +4,9 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import {byId,ROSTER} from './roster.js?v=20260927100449';
-import {K} from './kart.js?v=20260927100449';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {byId,ROSTER} from './roster.js?v=20260927101822';
+import {K} from './kart.js?v=20260927101822';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -74,8 +75,13 @@ export class View{
     const r=this.r=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
     this.pd=1; r.setPixelRatio(Math.min(devicePixelRatio||1,1.5)); el.appendChild(r.domElement);
     const s=this.scene=new THREE.Scene(); s.background=new THREE.Color(0xCFEBFA); s.fog=new THREE.Fog(0xCFEBFA,80,320);
-    s.add(new THREE.HemisphereLight(0xEAF6FF,0x3E6B34,2.2));
-    const sun=new THREE.DirectionalLight(0xFFF1D6,2.6); sun.position.set(80,140,40); s.add(sun);
+    // 電影感色調（ACES）＋環境反射（讓英雄模型有立體感）；只在開始時算一次，不增加每幀負擔
+    r.toneMapping=THREE.ACESFilmicToneMapping; r.toneMappingExposure=1.15;
+    { const pm=new THREE.PMREMGenerator(r); s.environment=pm.fromScene(new RoomEnvironment(),.04).texture; pm.dispose(); }
+    s.add(new THREE.HemisphereLight(0xEAF6FF,0x4A6B3A,2.0));
+    const sun=this.sun=new THREE.DirectionalLight(0xFFF0D0,3.0); sun.position.set(80,140,40); s.add(sun); s.add(sun.target);
+    // 高畫質的即時陰影：只照玩家周圍 90 m，跟著玩家移動
+    r.shadowMap.type=THREE.PCFSoftShadowMap; sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-45,right:45,top:45,bottom:-45,near:10,far:400}); sun.shadow.bias=-.0006; sun.shadow.normalBias=.4;
     this.cam=new THREE.PerspectiveCamera(62,1,.1,700);
     this.root=new THREE.Group(); s.add(this.root);
     this.dot=dotTex(); this.shTex=shadowTex();
@@ -88,8 +94,10 @@ export class View{
     addEventListener('resize',fit); addEventListener('orientationchange',()=>setTimeout(fit,300)); window.visualViewport?.addEventListener('resize',fit);
     fit(); this.fit=fit; this.el=el;
   }
-  // 畫質：std＝1.5 倍解析度；eco（省電）＝1 倍解析度、粒子減半
-  setQuality(q){ this.q=q; this.pd=q==='eco'?.5:1; this.r.setPixelRatio(q==='eco'?1:Math.min(devicePixelRatio||1,1.5)); this.fit(); }
+  // 畫質：eco（省電）＝1 倍解析度、粒子減半｜std＝1.5 倍｜hq（高畫質）＝2 倍解析度＋即時陰影＋路邊草叢＋路面凹凸（最耗電）
+  setQuality(q){ this.q=q; this.pd=q==='eco'?.5:1; this.r.setPixelRatio(q==='eco'?1:Math.min(devicePixelRatio||1,q==='hq'?2:1.5));
+    const sh=q==='hq'; if(this.r.shadowMap.enabled!==sh){ this.r.shadowMap.enabled=sh; this.sun.castShadow=sh; this.scene.traverse(o=>{ if(o.material) [].concat(o.material).forEach(m=>m.needsUpdate=true); }); }
+    this.fit(); }
   // 下載英雄模型（onProgress 回報 0～1）。失敗的會用替身。
   loadModels(urls,onProgress){
     const prog={}; const report=()=>{ const v=Object.values(prog); onProgress&&onProgress(v.length?v.reduce((a,b)=>a+b,0)/urls.length:1); };
@@ -98,14 +106,14 @@ export class View{
   }
   setup(track,race,me){
     this.root.clear(); this.sparks.clear(); this.puffs.clear(); this.fxm.clear(); this.flashes=[]; this.track=track; this.race=race; this.me=me;
-    track.build(this.root);
+    track.build(this.root,this.q);
     this.riders=race.karts.map(k=>this.makeRider(k));
     const k=race.karts[me]; this.cam.position.copy(k.pos).add(new THREE.Vector3(0,3,-8)); this.camT=0;
   }
   makeRider(k){
     const ch=byId(k.champ), g=new THREE.Group(), tilt=new THREE.Group(); g.add(tilt); this.root.add(g);
     const col=new THREE.Color(ch.color);
-    const board=new THREE.Mesh(roundedBox(.72,.13,1.6,.06,3),new THREE.MeshStandardMaterial({color:0xF4F1EA,roughness:.35,metalness:.2})); tilt.add(board);
+    const board=new THREE.Mesh(roundedBox(.72,.13,1.6,.06,3),new THREE.MeshStandardMaterial({color:0xF4F1EA,roughness:.35,metalness:.2})); tilt.add(board); board.castShadow=this.q==='hq';
     const stripe=new THREE.Mesh(roundedBox(.2,.02,1.3,.01,1),new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.6})); stripe.position.y=.075; tilt.add(stripe);
     const glow=new THREE.Mesh(new THREE.PlaneGeometry(.9,1.8),new THREE.MeshBasicMaterial({map:this.dot,color:col,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false})); glow.rotation.x=Math.PI/2; glow.position.y=-.1; tilt.add(glow);
     const thr=[-.22,.22].map(x=>{ const t=new THREE.Mesh(new THREE.CylinderGeometry(.07,.1,.22,10),new THREE.MeshStandardMaterial({color:0x444a55,metalness:.6,roughness:.4})); t.rotation.x=Math.PI/2; t.position.set(x,0,-.82); tilt.add(t); return t; });
@@ -132,7 +140,7 @@ export class View{
     const box=hideProps(model)||new THREE.Box3().setFromObject(model);   // 只用身體算大小（道具、同伴不算）
     const h=Math.max(1e-6,box.max.y-box.min.y), sc=RIDER_H/h, inner=new THREE.Group(); inner.add(model);
     inner.scale.setScalar(sc); inner.position.set(-(box.min.x+box.max.x)/2*sc,-box.min.y*sc,-(box.min.z+box.max.z)/2*sc);
-    const mats=[]; model.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); mats.push(o.material); } });
+    const mats=[]; model.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); if('envMapIntensity' in o.material) o.material.envMapIntensity=.55; o.castShadow=this.q==='hq'; mats.push(o.material); } });
     const ch=byId(R.k.champ), all=gltf.animations; clips.q=spellClip(all,ch.qi+1); clips.r=spellClip(all,ch.ri+1);
     R.body.remove(R.stand); R.body.add(inner); R.model=inner; R.mats=mats; R.champ={mixer,clips,cur:null,act:null};
   }
@@ -266,10 +274,11 @@ export class View{
       if(k.boostT>0){ if(Math.random()<pd) for(const s of [-.22,.22]){ const p=back.clone().addScaledVector(rt,s); p.y=g.position.y; this.sparks.emit(p,f.clone().multiplyScalar(-4+Math.random()).add(new THREE.Vector3((Math.random()-.5)*.6,(Math.random()-.5)*.6,(Math.random()-.5)*.6)),Math.random()<.5?0xFFB53A:0xFF6A2A,.28,0); } }
       else if(Math.random()<.35*pd) for(const s of [-.22,.22]){ const p=back.clone().addScaledVector(rt,s); p.y=g.position.y; this.sparks.emit(p,f.clone().multiplyScalar(-2),R.col.getHex(),.18,0); }
       if(k.offroad&&k.speed>6&&Math.random()<.6*pd){ const p=back.clone(); p.y=.2; this.puffs.emit(p,new THREE.Vector3((Math.random()-.5)*2,1+Math.random(),(Math.random()-.5)*2),0x5A6B35,.6,0); }
-      if(R.tag) R.tag.visible=g.position.distanceTo(this.cam.position)<60&&k.invisT<=0;
+      if(R.tag){ const d=g.position.distanceTo(this.cam.position); R.tag.visible=d<60&&d>6.5&&k.invisT<=0; }   // 太近（貼在鏡頭旁）就不顯示，免得名牌蓋住半個畫面
     });
     this.syncFx(race,dt,t); this.stepFlashes(dt);
     if(TR.sky) TR.sky.position.copy(this.cam.position);
+    if(this.r.shadowMap.enabled){ const mp=this.riders[this.me].g.position; this.sun.position.set(mp.x+60,mp.y+110,mp.z+30); this.sun.target.position.copy(mp); }
     this.sparks.update(dt); this.puffs.update(dt); TR.tick(t); TR.tickFeatures(race.t,me,t);
     // 鏡頭
     const R=this.riders[this.me], p=R.g.position, f=new THREE.Vector3(Math.sin(me.heading),0,Math.cos(me.heading));

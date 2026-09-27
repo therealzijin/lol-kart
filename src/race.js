@@ -1,7 +1,7 @@
 // 比賽進行：起跑格、倒數、固定步長模擬、碰撞、名次、完賽。只有邏輯，沒有畫面。
-import {Kart,collide,K} from './kart.js?v=20260927100449';
-import {initAI,driveAI} from './ai.js?v=20260927100449';
-import {stepSkills,cast,aiCast,onCollide} from './skills.js?v=20260927100449';
+import {Kart,collide,K} from './kart.js?v=20260927101822';
+import {initAI,driveAI} from './ai.js?v=20260927101822';
+import {stepSkills,cast,aiCast,onCollide} from './skills.js?v=20260927101822';
 
 export const DT=1/60;
 function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
