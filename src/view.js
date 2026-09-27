@@ -4,8 +4,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import {byId,ROSTER} from './roster.js?v=20260927095206';
-import {K} from './kart.js?v=20260927095206';
+import {byId,ROSTER} from './roster.js?v=20260927100449';
+import {K} from './kart.js?v=20260927100449';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -83,8 +83,10 @@ export class View{
     this.gltf={}; this.riders=[]; this.fxm=new Map(); this.flashes=[];
     const ktx=new KTX2Loader().setTranscoderPath(BASIS).detectSupport(r);
     this.loader=new GLTFLoader().setKTX2Loader(ktx).setMeshoptDecoder(MeshoptDecoder);
-    const fit=()=>{ const w=el.clientWidth||innerWidth, h=el.clientHeight||innerHeight; r.setSize(w,h,false); this.cam.aspect=w/h; this.cam.updateProjectionMatrix(); };
-    addEventListener('resize',fit); fit(); this.fit=fit;
+    const fit=()=>{ const w=el.clientWidth||innerWidth, h=el.clientHeight||innerHeight; this._w=w; this._h=h; r.setSize(w,h,false); this.cam.aspect=w/h; this.cam.updateProjectionMatrix(); };
+    // 從主畫面（全螢幕 App 模式）打開時，轉成橫向不一定會發 resize → 畫面被拉扁。多聽幾種事件，render() 每幀也再檢查一次
+    addEventListener('resize',fit); addEventListener('orientationchange',()=>setTimeout(fit,300)); window.visualViewport?.addEventListener('resize',fit);
+    fit(); this.fit=fit; this.el=el;
   }
   // 畫質：std＝1.5 倍解析度；eco（省電）＝1 倍解析度、粒子減半
   setQuality(q){ this.q=q; this.pd=q==='eco'?.5:1; this.r.setPixelRatio(q==='eco'?1:Math.min(devicePixelRatio||1,1.5)); this.fit(); }
@@ -233,6 +235,7 @@ export class View{
     else if(ev.e==='cast'){ const R=this.riders[ev.k]; if(R){ R.castT=.8; R.castSlot=ev.slot; } }
   }
   render(dt,t){
+    if(this.el.clientWidth!==this._w||this.el.clientHeight!==this._h) this.fit();   // 畫布實際大小變了（轉向、全螢幕）就重新設定比例
     const race=this.race, me=race.karts[this.me], TR=this.track;
     this.riders.forEach(R=>{
       const k=R.k, g=R.g;
