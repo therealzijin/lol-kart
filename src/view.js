@@ -4,8 +4,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import {byId,ROSTER} from './roster.js?v=20260927092948';
-import {K} from './kart.js?v=20260927092948';
+import {byId,ROSTER} from './roster.js?v=20260927095206';
+import {K} from './kart.js?v=20260927095206';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -17,6 +17,27 @@ const findClip=(clips,key)=>{ for(const r of CLIP[key]){ const c=clips.find(c=>r
 const spellClip=(clips,n)=>clips.find(c=>new RegExp('^spell'+n+'(\\.|$|_?a?$)','i').test(c.name))||clips.find(c=>new RegExp('^spell'+n,'i').test(c.name)&&!/toidle|torun|_in/i.test(c.name));
 const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A,beartrap:0xC9A46B,icewall:0xBFE8FF,storm:0x9FD8FF,alpha:0xC8FF6B,charge:0xFF7A3A,slam:0x6FD86B,minion:0xFFE27A,crab:0x5FB8C9};
 
+// 有些造型把「回城／表情動作的道具」（狗屋、椰子樹、海浪、拉霸機…）一起放在模型裡，待機動作也看得到，
+// 還會把外框撐得很大 → 角色被縮得很小。這裡把這類網格藏起來，並回傳「只算身體」的外框。
+const PROP_RX=/recall|emote|dance|joke|taunt|laugh|homeguard/i, KEEP_RX=/mount|weapon|bow|gun|blade|arrow|wing|tail|coat|cape|hair|shield|launcher|dragon|pet|companion|sword|staff|axe|hammer/i;
+export function hideProps(model){
+  let pelvis=null, head=null; model.traverse(o=>{ if(o.isBone){ if(!pelvis&&/^(c_)?(pelvis|hip)$/i.test(o.name)) pelvis=o; if(!head&&/^(c_)?head$/i.test(o.name)) head=o; } });
+  const body=new Set(); [pelvis,head].forEach(b=>b&&b.traverse(o=>{ if(o.isBone) body.add(o); }));
+  const info=[]; model.updateMatrixWorld(true);
+  model.traverse(o=>{ if(!o.isMesh) return; let bb, frac=0, names='';
+    if(o.isSkinnedMesh){ o.computeBoundingBox(); bb=o.boundingBox.clone().applyMatrix4(o.matrixWorld);
+      const SI=o.geometry.attributes.skinIndex, SW=o.geometry.attributes.skinWeight, bones=o.skeleton.bones, cnt=new Map(); let inB=0;
+      for(let i=0;i<SI.count;i++){ let bi=0,bw=-1; for(let k=0;k<4;k++){ const w=SW.getComponent(i,k); if(w>bw){ bw=w; bi=SI.getComponent(i,k); } } const b=bones[bi]; if(body.has(b)) inB++; else if(b) cnt.set(b,(cnt.get(b)||0)+1); }
+      frac=inB/Math.max(1,SI.count);
+      [...cnt.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3).forEach(([b])=>{ for(let p=b,d=0;p&&p.isBone&&d<4;p=p.parent,d++) names+=' '+p.name; });
+    } else { if(!o.geometry.boundingBox) o.geometry.computeBoundingBox(); bb=o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld); }
+    info.push({o,bb,frac,names}); });
+  const core=info.filter(m=>m.frac>=.3); if(!core.length) return null;
+  const box=new THREE.Box3(); core.forEach(m=>box.union(m.bb)); const H=Math.max(1e-6,box.max.y-box.min.y), c=box.getCenter(new THREE.Vector3());
+  info.forEach(m=>{ if(m.frac>=.05) return; const sz=m.bb.getSize(new THREE.Vector3()), mc=m.bb.getCenter(new THREE.Vector3()), off=Math.hypot(mc.x-c.x,mc.z-c.z)/H, big=Math.max(sz.x,sz.y,sz.z)/H;
+    if(PROP_RX.test(m.names)||(!KEEP_RX.test(m.names)&&(off>.8||big>1.6))) m.o.visible=false; });
+  return box;
+}
 function roundedBox(w,h,d,r,s){
   const g=new THREE.BoxGeometry(w,h,d,s,s,s), p=g.attributes.position, n=g.attributes.normal, v=new THREE.Vector3(), c=new THREE.Vector3(), dir=new THREE.Vector3(), cl=(x,a)=>Math.max(-a,Math.min(a,x));
   for(let i=0;i<p.count;i++){ v.fromBufferAttribute(p,i); c.set(cl(v.x,w/2-r),cl(v.y,h/2-r),cl(v.z,d/2-r)); dir.subVectors(v,c); if(dir.lengthSq()<1e-12) dir.fromBufferAttribute(n,i); dir.normalize(); p.setXYZ(i,c.x+dir.x*r,c.y+dir.y*r,c.z+dir.z*r); n.setXYZ(i,dir.x,dir.y,dir.z); }
@@ -105,8 +126,8 @@ export class View{
     Object.keys(CLIP).forEach(k=>{ const c=findClip(gltf.animations,k); if(c) clips[k]=c; });
     if(clips.idle){ mixer.clipAction(clips.idle).play(); mixer.update(0); }
     model.updateMatrixWorld(true);
-    const box=new THREE.Box3();
-    model.traverse(o=>{ if(!o.isMesh) return; o.frustumCulled=false; let bb; if(o.isSkinnedMesh){ o.computeBoundingBox(); bb=o.boundingBox.clone(); } else { o.geometry.computeBoundingBox(); bb=o.geometry.boundingBox.clone(); } box.union(bb.applyMatrix4(o.matrixWorld)); });
+    model.traverse(o=>{ if(o.isMesh) o.frustumCulled=false; });
+    const box=hideProps(model)||new THREE.Box3().setFromObject(model);   // 只用身體算大小（道具、同伴不算）
     const h=Math.max(1e-6,box.max.y-box.min.y), sc=RIDER_H/h, inner=new THREE.Group(); inner.add(model);
     inner.scale.setScalar(sc); inner.position.set(-(box.min.x+box.max.x)/2*sc,-box.min.y*sc,-(box.min.z+box.max.z)/2*sc);
     const mats=[]; model.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); mats.push(o.material); } });

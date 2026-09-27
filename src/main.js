@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927092948';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927092948';
-import {Track,TRACK_DEF} from './track.js?v=20260927092948';
-import {Race,DT} from './race.js?v=20260927092948';
-import {View} from './view.js?v=20260927092948';
-import {initInput,pollInput} from './input.js?v=20260927092948';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927092948';
-import {initAI,driveAI} from './ai.js?v=20260927092948';
-import {KITS,cast} from './skills.js?v=20260927092948';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927095206';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927095206';
+import {Track,TRACK_DEF} from './track.js?v=20260927095206';
+import {Race,DT} from './race.js?v=20260927095206';
+import {View} from './view.js?v=20260927095206';
+import {initInput,pollInput} from './input.js?v=20260927095206';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927095206';
+import {initAI,driveAI} from './ai.js?v=20260927095206';
+import {KITS,cast} from './skills.js?v=20260927095206';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -193,7 +193,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260927092948';
+import * as Online from './online.js?v=20260927095206';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },
@@ -216,6 +216,14 @@ document.querySelectorAll('#seg-q button').forEach(x=>x.classList.toggle('sel',x
 function markLaps(){ document.querySelectorAll('#seg-laps button').forEach(x=>x.classList.toggle('sel',+x.dataset.v===laps)); }
 document.querySelectorAll('#seg-laps button').forEach(b=>b.onclick=()=>{ laps=+b.dataset.v; ls.set('lk-laps',laps); markLaps(); });
 markLaps();
+// 全螢幕：能用 Fullscreen API 就直接切（Android／電腦）；iPhone 不支援 → 教「加入主畫面」。已經是主畫面 App 模式就不顯示按鈕
+const isApp=matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches||navigator.standalone;
+if(isApp) $('b-fs').style.display='none';
+$('b-fs').onclick=()=>{ const el=document.documentElement;
+  if(document.fullscreenElement){ document.exitFullscreen?.(); return; }
+  if(document.fullscreenEnabled&&el.requestFullscreen) el.requestFullscreen().then(()=>screen.orientation?.lock?.('landscape')).catch(()=>show('s-a2hs'));
+  else show('s-a2hs'); };
+$('a2hs-ok').onclick=()=>show('s-title');
 $('b-solo').onclick=()=>{ $('t-err').textContent=''; startRace(entrantsSolo(),{me:0}); };
 $('b-online').onclick=()=>{ $('t-err').textContent=''; show('s-online'); Online.openOnline(); };
 initInput(); applyLang(); setVoiceLang(()=>lang);

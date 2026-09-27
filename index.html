@@ -148,6 +148,7 @@ body.racing.portrait #rotate{display:flex}
   <div class="t-wrap">
     <div class="t-top">
       <h1 data-i="title"></h1>
+      <button class="seg" id="b-fs" style="padding:6px 12px;font-weight:700;font-size:13px" data-i="fs"></button>
       <div class="seg" id="seg-lang"><button data-v="zh">中文</button><button data-v="ja">日本語</button></div>
     </div>
     <p class="sub" data-i="sub"></p>
@@ -197,10 +198,15 @@ body.racing.portrait #rotate{display:flex}
   </div>
 </section>
 <section class="screen" id="s-load"><div id="load-t"></div><div class="bar"><i id="load-bar"></i></div><div id="load-s"></div></section>
+<!-- iPhone Safari 不能用網頁切全螢幕：教使用者「加入主畫面」 -->
+<section class="screen" id="s-a2hs" style="align-items:center;justify-content:center;background:rgba(8,12,20,.8)"><div class="res" style="max-width:420px">
+  <h2 data-i="a2hsT"></h2><p style="font-size:14px;line-height:1.6;margin:6px 0 4px" data-i="a2hsB"></p>
+  <ol style="font-size:14px;line-height:1.8;padding-left:20px"><li data-i="a2hs1"></li><li data-i="a2hs2"></li><li data-i="a2hs3"></li></ol>
+  <button class="big go" id="a2hs-ok" data-i="ok"></button></div></section>
 <section class="screen" id="s-result"><div class="res" id="res"></div></section>
 <div id="rotate"><div class="ph"></div><div data-i="rotate"></div></div>
 
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
-<script type="module" src="src/main.js?v=20260927092948"></script>
+<script type="module" src="src/main.js?v=20260927095206"></script>
 </body>
 </html>
