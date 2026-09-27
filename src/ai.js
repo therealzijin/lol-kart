@@ -15,8 +15,10 @@ export function driveAI(k,track,karts,t){
   let laneWant=Math.max(-.55,Math.min(.55,A.lane+Math.sin(t*.21+A.wob)*.18+turnDir*Math.min(.35,bend*.4)))*half;
   // 前方 30 m 內有石柱／小兵／河道蟹擋在自己的線上 → 換到旁邊的空位（反應有個別差異，偶爾還是會撞）
   const obs=track.pillars.concat(track.hzAI), seeHz=A.skill>.92?30:13;   // 技術差的電腦比較晚才看到小兵
-  for(const o of obs){ const oq=o.as!=null?{s:o.as,lat:o.alat}:o, orr=o.ar||o.r; let ds=oq.s-k.s; if(ds<-track.L/2) ds+=track.L; if(ds>track.L/2) ds-=track.L;
-    if(ds>2&&ds<(o.as!=null?seeHz:30)&&Math.abs(oq.lat-laneWant)<orr+1.8){ const alt=[oq.lat-orr-2.4,oq.lat+orr+2.4].filter(v=>Math.abs(v)<half-1); if(alt.length){ laneWant=alt.reduce((a,b)=>Math.abs(b-q.lat)<Math.abs(a-q.lat)?b:a); break; } } }
+  let block=null, bds=1e9;                                                    // 擋在線上、最近的那一個
+  for(const o of obs){ if(o.on===false&&!o.warn) continue; const oq=o.as!=null?{s:o.as,lat:o.alat}:o, orr=o.ar||o.r; let ds=oq.s-k.s; if(ds<-track.L/2) ds+=track.L; if(ds>track.L/2) ds-=track.L;
+    if(ds>2&&ds<(o.as!=null?seeHz:30)&&ds<bds&&Math.abs(oq.lat-laneWant)<orr+1.8){ block={lat:oq.lat,r:orr}; bds=ds; } }
+  if(block){ const alt=[block.lat-block.r-2.4,block.lat+block.r+2.4].filter(v=>Math.abs(v)<half-1); if(alt.length) laneWant=alt.reduce((a,b)=>Math.abs(b-q.lat)<Math.abs(a-q.lat)?b:a); }
   const look=4.5+k.speed*.36, m=track.sample(k.s+look);
   const tx=m.pos.x+m.nrm.x*laneWant, tz=m.pos.z+m.nrm.z*laneWant;
   const diff=ang(Math.atan2(tx-k.pos.x,tz-k.pos.z)-k.heading);               // 正 = 目標在左

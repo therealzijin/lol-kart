@@ -5,15 +5,15 @@ const PFX='lkart-';
 export const MAX_PLAYERS=6;
 export class Net{
   // 每條連線有兩個通道：c 可靠（開賽、技能、命中）、f 不必依序（位置），掉封包也不會卡住後面的
-  constructor(){ this.peer=null; this.links=new Map(); this.handlers={}; this.isHost=false; this.code=''; this.closed=false; this.rtt=60; this.id='host'; }
+  constructor(){ this.peer=null; this.links=new Map(); this.handlers={}; this.isHost=false; this.code=''; this.closed=false; this.rtt=60; this.id='host'; this.timeout=null; this.expectFast=false; }
   on(t,fn){ (this.handlers[t]=this.handlers[t]||[]).push(fn); return this; }
   emit(t,m,from){ (this.handlers[t]||[]).forEach(f=>f(m,from)); }
   _send(ch,m,to){ const s=typeof m==='string'?m:JSON.stringify(m);
-    for(const [id,L] of this.links){ if(to!=null&&id!==to) continue; const c=ch==='f'&&L.f&&L.f.open?L.f:L.c; if(c&&c.open){ try{ c.send(s); }catch(e){} } } }
+    for(const [id,L] of this.links){ if(to!=null&&id!==to) continue; const c=ch==='f'&&L.f&&L.f.open&&!L.noFast?L.f:L.c; if(c&&c.open){ try{ c.send(s); }catch(e){} } } }
   send(m,to){ this._send('c',m,to); }                      // 房主：給所有來賓（或指定一位）；來賓：給房主
   sendFast(m,to){ this._send('f',m,to); }
   // 房主：把某位來賓傳來的消息轉給其他人
-  relay(m,from,fast){ for(const [id,L] of this.links){ if(id===from) continue; const c=fast&&L.f&&L.f.open?L.f:L.c; if(c&&c.open){ try{ c.send(JSON.stringify(m)); }catch(e){} } } }
+  relay(m,from,fast){ for(const [id,L] of this.links){ if(id===from) continue; const c=fast&&L.f&&L.f.open&&!L.noFast?L.f:L.c; if(c&&c.open){ try{ c.send(JSON.stringify(m)); }catch(e){} } } }
   get open(){ for(const L of this.links.values()) if(L.c&&L.c.open) return true; return false; }
   get peers(){ return [...this.links.keys()]; }
   _data(d,from){ let m; try{ m=typeof d==='string'?JSON.parse(d):d; }catch(e){ return; } if(m&&m.t){ const L=this.links.get(from); if(L) L.last=performance.now(); this.emit(m.t,m,from); } }
@@ -24,15 +24,24 @@ export class Net{
     const gone=()=>{ if(this.closed||!this.links.has(id)) return; if(this.links.get(id).c!==c) return; this.links.delete(id); this.emit('_close',{},id); };
     c.on('close',gone); c.on('error',gone);
   }
-  _wireFast(c,id){ const L=this._link(id); L.f=c; c.on('data',d=>this._data(d,id)); }
-  // 量延遲＋心跳：每 2 秒 ping；房主 20 秒、來賓 30 秒沒收到對方任何消息就當作斷線
+  _wireFast(c,id){ const L=this._link(id); L.f=c; L.noFast=false; L.lastF=performance.now(); c.on('data',d=>{ L.lastF=performance.now(); this._data(d,id); }); }
+  // 比賽中兩邊都會一直送位置：快速通道 2 秒沒收到東西、但可靠通道還活著 → 請對方改用可靠通道送（有些手機的不可靠通道會悄悄卡住）
+  watchFast(on){ this.expectFast=on; const now=performance.now(); for(const L of this.links.values()){ L.lastF=now; L.askedSlow=false; } }
+  // 房主：安靜地移除一位來賓（不觸發斷線事件）
+  drop(id){ const L=this.links.get(id); if(!L) return; this.links.delete(id); try{ L.c&&L.c.close(); L.f&&L.f.close(); }catch(e){} }
+  // 放棄這條連線（不送 bye、不觸發事件）：重新連線前用
+  kill(){ this.closed=true; clearInterval(this._ping); const ls=[...this.links.values()]; this.links.clear(); for(const L of ls){ try{ L.c&&L.c.close(); L.f&&L.f.close(); }catch(e){} } try{ this.peer&&this.peer.destroy(); }catch(e){} }
+  // 量延遲＋心跳：每 2 秒 ping；timeout 內沒收到對方任何消息就當作斷線（大廳：房主 20 秒、來賓 30 秒；比賽中由 online.js 調短）
   _beat(){
     clearInterval(this._ping); let tick=performance.now();
-    this.on('_ping',(m,from)=>this.send({t:'_pong',c:m.c},from)).on('_pong',m=>{ const r=performance.now()-m.c; if(r>0&&r<3000) this.rtt=this.rtt*.7+r*.3; });
+    this.on('_ping',(m,from)=>this.send({t:'_pong',c:m.c},from)).on('_pong',m=>{ const r=performance.now()-m.c; if(r>0&&r<3000) this.rtt=this.rtt*.7+r*.3; })
+      .on('_slow',(m,from)=>{ const L=this.links.get(from); if(L) L.noFast=true; });
     this._ping=setInterval(()=>{ const now=performance.now(), gap=now-tick; tick=now;
       if(gap>8000){ for(const L of this.links.values()) L.last=now; return; }   // 自己剛被暫停（切到別的 App）：重算，不誤判
       this.send({t:'_ping',c:now});
-      for(const [id,L] of [...this.links]) if(now-L.last>(this.isHost?20000:30000)){ try{ L.c&&L.c.close(); L.f&&L.f.close(); }catch(e){} this.links.delete(id); this.emit('_close',{},id); } },2000);
+      if(this.expectFast) for(const [id,L] of this.links) if(L.f&&!L.askedSlow&&now-L.lastF>2000&&now-L.last<3000){ L.askedSlow=true; this.send({t:'_slow'},id); }
+      const lim=this.timeout||(this.isHost?20000:30000);
+      for(const [id,L] of [...this.links]) if(now-L.last>lim){ try{ L.c&&L.c.close(); L.f&&L.f.close(); }catch(e){} this.links.delete(id); this.emit('_close',{},id); } },2000);
   }
   // 開房：回傳房號
   host(){

@@ -150,7 +150,7 @@ export class Kart{
 // la / lb：這支手機負責哪一台（另一台是網路同步來的，不要推它）
 export function collide(a,b,la=true,lb=true){
   const dx=b.pos.x-a.pos.x, dz=b.pos.z-a.pos.z, d2=dx*dx+dz*dz, R=K.R*2;
-  if(d2>=R*R||d2<1e-6||Math.abs(a.y-b.y)>1.2) return false;
+  if(!(d2<R*R)||d2<1e-6||Math.abs(a.y-b.y)>1.2) return false;   // !(d2<…)：NaN 也當作沒碰到
   const d=Math.sqrt(d2), nx=dx/d, nz=dz/d, pen=(R-d)/2;
   const wa=la&&lb?1:la?2:0, wb=la&&lb?1:lb?2:0;
   a.pos.x-=nx*pen*wa; a.pos.z-=nz*pen*wa; b.pos.x+=nx*pen*wb; b.pos.z+=nz*pen*wb;

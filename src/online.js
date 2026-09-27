@@ -2,11 +2,11 @@
 // 星狀連線：來賓只連房主，房主把每位來賓的位置／技能／命中轉給其他人。
 // 分工：每支手機負責自己的車；房主另外負責電腦（還有中途斷線的人）。
 // 別人的車：用「最後收到的狀態＋速度×(經過時間＋單程延遲)」推算它現在在哪，再平滑靠過去（不再顯示過去的位置）。
-import {Net,MAX_PLAYERS} from './net.js?v=20260927163241';
-import {T,lang} from './i18n.js?v=20260927163241';
-import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260927163241';
-import {cast,remoteHit} from './skills.js?v=20260927163241';
-import {initAI} from './ai.js?v=20260927163241';
+import {Net,MAX_PLAYERS} from './net.js?v=20260927210901';
+import {T,lang} from './i18n.js?v=20260927210901';
+import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260927210901';
+import {cast,remoteHit} from './skills.js?v=20260927210901';
+import {initAI} from './ai.js?v=20260927210901';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -29,6 +29,8 @@ export function applyRemote(race,k){
   const R=rem[k.idx]; if(!R||!R.L) return; const L=R.L;
   const owd=(net?net.rtt:60)/2, age=Math.min(.35,Math.max(0,(performance.now()-R.tr+owd)/1000));
   const tx=L.x+L.vx*age, tz=L.z+L.vz*age, th=L.heading+(R.angV||0)*Math.min(age,.15);
+  if(!Number.isFinite(tx+tz+th)){ R.init=false; return; }                                                    // 壞掉的封包：不要套用（NaN 會經由碰撞傳染給別的車）
+  if(!Number.isFinite(R.ox+R.oz+R.oh)) R.init=false;
   // 只平滑「修正量」：車照預測的軌跡走，新封包造成的落差 off 再慢慢歸零（不會因為平滑而一直落後）
   if(!R.init||Math.hypot(tx-k.pos.x,tz-k.pos.z)>8){ R.ox=R.oz=R.oh=0; R.init=true; }                     // 差太多（被拉回、傳送）就直接跳過去
   else if(R.fresh){ R.ox=k.pos.x-tx; R.oz=k.pos.z-tz; let dh=k.heading-th; R.oh=Math.atan2(Math.sin(dh),Math.cos(dh)); }
@@ -49,19 +51,20 @@ function lobbyUI(){
   $('o-players').innerHTML=list.map((p,i)=>`<div class="op" style="${p.id===myId?'border-color:var(--gold)':''}"><img src="${circleUrl(p.skin)}" alt=""><b>${esc(p.name)}</b><small>${esc(byId(p.champ).name[lang])}</small><i>${i===0?T('host'):T('guest')}</i></div>`).join('')
     +(list.length<MAX_PLAYERS?`<div class="op empty">${T('waitingMore',{k:list.length,m:MAX_PLAYERS})}</div>`:'');
   $('o-codebig').textContent=net?net.code:'';
-  $('o-cpu-row').style.display=host?'':'none'; $('o-laps-row').style.display=host?'':'none';
+  $('o-cpu-row').style.display=host?'':'none'; $('o-laps-row').style.display=host?'':'none'; $('o-track-row').style.display=host?'':'none';
+  document.querySelectorAll('#seg-otrack button').forEach(b=>b.classList.toggle('sel',b.dataset.v===G.getTrack()));
   document.querySelectorAll('#seg-olaps button').forEach(b=>b.classList.toggle('sel',+b.dataset.v===G.getLaps()));
   $('o-start').style.display=host?'':'none'; $('o-start').disabled=list.length<2;
   const room=MAX_PLAYERS-list.length; if(host&&cpuN>room) cpuN=room;   // 真人＋電腦最多 6 台
   document.querySelectorAll('#seg-cpu button').forEach(b=>{ b.classList.toggle('sel',+b.dataset.v===cpuN); b.disabled=+b.dataset.v>room; });
-  $('o-status').textContent=host?(list.length>1?T('guestsJoined',{k:list.length,m:MAX_PLAYERS}):T('tellCode')):`${T('waitingHost')}（${T('laps')}：${T('lapsIs',{n:G.getLaps()})}）`;
+  $('o-status').textContent=host?(list.length>1?T('guestsJoined',{k:list.length,m:MAX_PLAYERS}):T('tellCode')):`${T('waitingHost')}（${G.trackName(G.getTrack())}・${T('lapsIs',{n:G.getLaps()})}）`;
 }
 function showChoose(){ $('o-choose').style.display=''; $('o-lobby').style.display='none'; $('o-err').textContent=''; }
 function showLobby(){ $('o-choose').style.display='none'; $('o-lobby').style.display=''; lobbyUI(); }
 // 房主：名單有變就廣播（含電腦人數、圈數）
 function broadcastRoster(){ if(!net||!net.isHost) return;
   roster=[Object.assign({id:'host'},G.myEntry())].concat([...peers].map(([id,p])=>Object.assign({id},p)));
-  net.send({t:'roster',list:roster,cpu:cpuN,laps:G.getLaps()}); lobbyUI(); }
+  net.send({t:'roster',list:roster,cpu:cpuN,laps:G.getLaps(),track:G.getTrack()}); lobbyUI(); }
 
 /* ---------- 開賽 ---------- */
 function makeConfig(){
@@ -72,7 +75,7 @@ function makeConfig(){
   const n=Math.max(0,Math.min(cpuN,MAX_PLAYERS-list.length));
   for(let i=0;i<n;i++){ const c=pool[i%pool.length]; list.push({name:`${c.name[lang]} ${'ABC'[Math.floor(i/pool.length)]}`,champ:c.id,skin:String(c.key*1000),cpu:true,side:'host'}); }
   list.forEach(e=>e.url=modelUrl(e.champ,e.skin));
-  return {entrants:list,seed:Math.floor(Math.random()*1e9),laps:G.getLaps()};
+  return {entrants:list,seed:Math.floor(Math.random()*1e9),laps:G.getLaps(),track:G.getTrack()};
 }
 function beginFromConfig(cfg){
   lastCfg=cfg; readySelf=false; readyIds.clear(); Object.keys(rem).forEach(k=>delete rem[k]); Object.keys(lastN).forEach(k=>delete lastN[k]);
@@ -80,12 +83,12 @@ function beginFromConfig(cfg){
   const list=cfg.entrants.map(e=>Object.assign({},e,{local:e.side===mine}));
   me=list.findIndex(e=>e.human&&e.side===mine);
   if(me<0){ state='idle'; G.titleError(T('disconnected')); return; }       // 名單裡沒有自己（中途才加入）
-  if(cfg.laps) G.setLaps(cfg.laps);
+  if(cfg.laps) G.setLaps(cfg.laps); if(cfg.track) G.setTrack(cfg.track);
   state='loading';
-  G.startRace(list,{me,seed:cfg.seed,online:true,laps:cfg.laps||3,
+  G.startRace(list,{me,seed:cfg.seed,online:true,laps:cfg.laps||3,track:cfg.track||'rift',
     applyRemote:(race,k)=>applyRemote(race,k),
-    onCast:c=>{ if(net) net.send(Object.assign({t:'cast'},c)); },
-    onHit:h=>{ if(net) net.send(Object.assign({t:'hit'},h)); },
+    onCast:c=>{ if(net&&state==='racing') net.send(Object.assign({t:'cast'},c)); },   // 重新連線中不送（這時別人的車暫時由這支手機的電腦代跑）
+    onHit:h=>{ if(net&&state==='racing') net.send(Object.assign({t:'hit'},h)); },
     onLoaded:()=>{ if(!net) return; readySelf=true; net.send({t:'ready'}); if(net.isHost) tryGo(); else if(pendingStart){ pendingStart=null; go(); } },
   });
 }
@@ -93,8 +96,10 @@ function beginFromConfig(cfg){
 function tryGo(){ if(!net||!net.isHost||!readySelf||!lastCfg||state!=='loading') return;
   const need=lastCfg.entrants.filter(e=>e.human&&e.side!=='host'&&peers.has(e.side)).map(e=>e.side);
   if(need.every(id=>readyIds.has(id))){ net.send({t:'go'}); go(); } }
-function go(){ state='racing'; G.go(); }
-export function setResults(){ if(state==='racing') state='results'; }
+// 比賽中斷線要快點發現：房主 9 秒、來賓 5 秒沒收到任何消息（平常每秒 30 次）就當作斷線
+function raceNet(on){ if(!net) return; net.watchFast(on); net.timeout=on?(net.isHost?9000:5000):null; }
+function go(){ state='racing'; raceNet(true); G.go(); }
+export function setResults(){ if(state==='racing'){ state='results'; raceNet(false); } }
 // 房主：某位來賓的車改由這支手機的電腦接手
 function takeOver(id){ const race=G.race(); if(!race||!lastCfg) return;
   lastCfg.entrants.forEach((e,i)=>{ if(e.side!==id) return; const k=race.karts[i]; if(!k||k.local) return; k.local=true; if(k.human){ k.human=false; k.cpu=true; } if(!k.ai) initAI(k,Math.random); }); }
@@ -102,7 +107,7 @@ function takeOver(id){ const race=G.race(); if(!race||!lastCfg) return;
 /* ---------- 連線事件 ---------- */
 function wire(){
   net.on('hello',(m,from)=>{ if(!net.isHost) return; peers.set(from,{name:m.name,champ:m.champ,skin:m.skin}); broadcastRoster(); })
-     .on('roster',m=>{ if(net.isHost) return; roster=m.list||[]; cpuN=m.cpu; if([3,5,7].includes(m.laps)) G.setLaps(m.laps); lobbyUI(); })
+     .on('roster',m=>{ if(net.isHost) return; roster=m.list||[]; cpuN=m.cpu; if([3,5,7].includes(m.laps)) G.setLaps(m.laps); if(m.track) G.setTrack(m.track); lobbyUI(); })
      .on('full',()=>{ const n=net; net=null; n&&n.close(); showChoose(); $('o-err').textContent=T('roomFull'); })
      .on('config',m=>{ if(!net.isHost) beginFromConfig(m.cfg); })
      .on('ready',(m,from)=>{ if(net.isHost){ readyIds.add(from); tryGo(); } })
@@ -112,15 +117,44 @@ function wire(){
         if(m.n!=null){ if(m.n<=(lastN[src]||0)) return; lastN[src]=m.n; }                      // 晚到的舊封包丟掉（每位送出者各自編號）
         const race=G.race(), t=performance.now();
         for(const a of m.k){ if(race&&race.karts[a[0]]&&race.karts[a[0]].local) continue;
-          const d=unpack(a), R=rem[a[0]]||(rem[a[0]]={});
+          const d=unpack(a); if(!Number.isFinite(d.x+d.z+d.heading+d.vx+d.vz)) continue; const R=rem[a[0]]||(rem[a[0]]={});
           if(R.L&&m.st&&R.st&&R.src===src){ const dt=(m.st-R.st)/1000; if(dt>.005){ let dh=d.heading-R.L.heading; dh=Math.atan2(Math.sin(dh),Math.cos(dh)); R.angV=Math.max(-14,Math.min(14,dh/dt)); } }
           R.L=d; R.tr=t; R.st=m.st; R.src=src; R.fresh=true; } })
      .on('cast',(m,from)=>{ if(net.isHost&&from!=='host') net.relay(m,from,false); const race=G.race(); if(!race) return; const k=race.karts[m.k]; if(k&&!k.local) cast(race,k,m.slot,m); })
      .on('hit',(m,from)=>{ if(net.isHost&&from!=='host') net.relay(m,from,false); const race=G.race(); if(race) remoteHit(race,m); })
-     .on('bye',(m,from)=>gone(from))
+     .on('rejoin',(m,from)=>hostRejoin(m,from))
+     .on('bye',(m,from)=>gone(from,true))
      .on('_close',(m,from)=>gone(from));
 }
-function gone(id){ if(!net) return; if(net.isHost) guestLost(id); else lost(); }
+function gone(id,bye){ if(!net) return; if(net.isHost) guestLost(id); else lost(bye); }
+// 房主：斷線的來賓重新連上 → 把他的車還給他（電腦停止代跑）
+function hostRejoin(m,from){
+  if(!net.isHost) return; const race=G.race(), e=lastCfg&&lastCfg.entrants[m.idx];
+  if(!(state==='racing'&&race&&e&&e.human&&(e.side===m.old||e.side===from))){ net.send({t:'rejoined',ok:false},from); return; }
+  if(m.old!==from){ peers.delete(m.old); net.drop(m.old); }
+  peers.set(from,{name:m.name,champ:m.champ,skin:m.skin}); e.side=from;
+  const k=race.karts[m.idx]; if(k){ k.local=false; k.human=true; k.cpu=false; } delete rem[m.idx];
+  net.watchFast(true); net.send({t:'rejoined',ok:true},from); G.notice(T('oppBack',{n:m.name}));
+}
+// 來賓：比賽中和房主斷線 → 先讓這支手機的電腦代跑別人的車（畫面不會卡住），同時在背景重新連線（最多 3 次）
+async function rejoin(){
+  const oldId=net.id, code=net.code; net.kill(); net=null; state='rejoin'; G.notice(T('reconnecting'));
+  for(let tries=0;tries<3&&state==='rejoin';tries++){
+    const n=new Net(); net=n; wire();
+    try{
+      await n.join(code); if(net!==n) return;
+      const ok=await new Promise(res=>{ const t=setTimeout(()=>res(false),5000); n.on('rejoined',m=>{ clearTimeout(t); res(!!m.ok); }); n.send(Object.assign({t:'rejoin',idx:me,old:oldId},G.myEntry())); });
+      if(net!==n||state!=='rejoin') return;
+      if(ok){ restoreSeats(); const race=G.race(); state=race&&race.phase==='done'?'results':'racing'; raceNet(state==='racing'); G.notice(T('reconnected')); return; }
+      break;                                                   // 房主拒絕（比賽已經結束等）
+    }catch(e){ if(net===n){ n.kill(); net=null; } }
+    await new Promise(r=>setTimeout(r,1500));
+  }
+  if(state==='rejoin'){ if(net){ net.kill(); net=null; } state='solo'; G.notice(T('oppLeft')); }
+}
+// 重新連上：別人的車改回由網路同步（等收到新位置才開始套用，不會先跳回舊位置）
+function restoreSeats(){ const race=G.race(); if(!race||!lastCfg) return;
+  race.karts.forEach((k,i)=>{ if(i===me) return; const e=lastCfg.entrants[i]; k.local=false; if(e&&e.human){ k.human=true; k.cpu=false; } delete rem[i]; }); }
 // 房主：來賓離開。大廳就從名單移除；讀取中當作讀完；比賽中改由電腦接手，其他人繼續跑
 function guestLost(id){
   const p=peers.get(id); if(!p) return; peers.delete(id);
@@ -129,8 +163,10 @@ function guestLost(id){
   broadcastRoster();
 }
 // 來賓：和房主斷線 → 比賽中就由這支手機接手所有別人的車（改成電腦），自己跑完
-function lost(){
-  if(!net) return; const was=state; net.closed=true;
+function lost(bye){
+  if(!net||state==='rejoin') return; const was=state;
+  if(was==='racing'&&!bye){ const race=G.race(); if(race) race.karts.forEach(k=>{ if(!k.local){ k.local=true; if(k.human){ k.human=false; k.cpu=true; } if(!k.ai) initAI(k,Math.random); } }); rejoin(); return; }
+  net.closed=true;
   if(was==='loading'){ net=null; state='idle'; roster=[]; G.toTitle(); G.titleError(T('disconnected')); return; }
   if(was==='racing'){
     const race=G.race();
@@ -145,6 +181,7 @@ export function initOnline(api){
   G=api;
   document.querySelectorAll('#seg-cpu button').forEach(b=>b.onclick=()=>{ if(b.disabled) return; cpuN=+b.dataset.v; broadcastRoster(); lobbyUI(); });
   document.querySelectorAll('#seg-olaps button').forEach(b=>b.onclick=()=>{ G.setLaps(+b.dataset.v); broadcastRoster(); lobbyUI(); });
+  document.querySelectorAll('#seg-otrack button').forEach(b=>b.onclick=()=>{ G.setTrack(b.dataset.v); broadcastRoster(); lobbyUI(); });
   $('o-host').onclick=async()=>{
     $('o-err').textContent=T('connecting'); leave(true);
     net=new Net(); wire();
@@ -165,6 +202,7 @@ export function isHost(){ return !!(net&&net.isHost); }
 export function rematch(){ if(!net||!net.isHost||!peers.size) return false; const cfg=makeConfig(); net.send({t:'config',cfg}); beginFromConfig(cfg); return true; }
 // 每個模擬步呼叫；每 2 步送一次自己負責的車（房主：給所有來賓；來賓：給房主，房主再轉）
 let stepN=0;
-export function tick(race){ if(!net||!net.open) return; if(++stepN%SEND_EVERY) return; net.sendFast({t:'snap',n:++sendN,st:Math.round(performance.now()),k:race.karts.filter(k=>k.local).map(pack)}); }
+export function tick(race){ if(!net||!net.open||state!=='racing') return; if(++stepN%SEND_EVERY) return; net.sendFast({t:'snap',n:++sendN,st:Math.round(performance.now()),k:race.karts.filter(k=>k.local).map(pack)}); }
 export function leave(silent){ if(net){ net.close(); } net=null; peers.clear(); roster=[]; state='idle'; if(!silent) showChoose(); }
 export function stateOf(){ return state; }
+export const _dbg={get net(){ return net; }, get state(){ return state; }, get peers(){ return peers; }};   // 除錯用

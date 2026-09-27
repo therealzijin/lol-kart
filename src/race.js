@@ -1,7 +1,7 @@
 // 比賽進行：起跑格、倒數、固定步長模擬、碰撞、名次、完賽。只有邏輯，沒有畫面。
-import {Kart,collide,K} from './kart.js?v=20260927163241';
-import {initAI,driveAI} from './ai.js?v=20260927163241';
-import {stepSkills,cast,aiCast,onCollide} from './skills.js?v=20260927163241';
+import {Kart,collide,K} from './kart.js?v=20260927210901';
+import {initAI,driveAI} from './ai.js?v=20260927210901';
+import {stepSkills,cast,aiCast,onCollide} from './skills.js?v=20260927210901';
 
 export const DT=1/60;
 function rng(seed){ let s=seed>>>0; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
@@ -32,14 +32,15 @@ export class Race{
           if(I.q&&!k.prevQ) cast(this,k,'q'); if(I.r&&!k.prevR) cast(this,k,'r'); k.prevQ=I.q; k.prevR=I.r; } }   // 按下的瞬間才施放
       else if(k.cpu&&racing){ driveAI(k,T,this.karts,this.t); aiCast(this,k); }
       k.update(DT,T,racing);
+      if(!Number.isFinite(k.pos.x+k.pos.z+k.heading+k.y)) this.recover(k);
     }
     for(let a=0;a<this.karts.length;a++) for(let b=a+1;b<this.karts.length;b++) { const A=this.karts[a], B=this.karts[b]; if((A.local||B.local)&&collide(A,B,A.local,B.local)) onCollide(this,A,B); }
     stepSkills(this,DT);
-    // 會動的障礙（小兵、河道蟹）：只判定這支手機負責的車
+    // 會動的障礙（小兵、河道蟹、魄羅、砲擊）：只判定這支手機負責的車
     if(racing){ const hz=T.hazards(this.t);
       for(const k of this.karts){ if(!k.local||k.finished||k.y>.7||k.immuneT>0) continue;
-        for(const o of hz){ const rr=o.r+K.R; if((k.pos.x-o.x)**2+(k.pos.z-o.z)**2>rr*rr) continue;
-          const res=k.hit(o.kind==='crab'?{knock:6,spin:.8}:{spin:.45,slow:.5});
+        for(const o of hz){ if(o.on===false) continue; const rr=o.r+K.R; if((k.pos.x-o.x)**2+(k.pos.z-o.z)**2>rr*rr) continue;
+          const res=k.hit(o.eff);
           if(res) this.events.push({k:k.idx,e:'fxhit',kind:o.kind,x:k.pos.x,z:k.pos.z,blocked:res==='block'}); break; } } }
     for(const k of this.karts){
       if(k.local&&!k.finished&&k.lap>this.laps) this.markFinished(k,this.time);
@@ -54,6 +55,8 @@ export class Race{
     if(this.phase==='race'&&(hs.length?hs.every(k=>k.finished):this.karts.every(k=>k.finished))){ this.phase='finish'; this.endT=this.time+12; }
     if(this.phase==='finish'&&(this.karts.every(k=>k.finished)||this.time>=this.endT)){ this.phase='done'; this.events.push({k:-1,e:'done'}); }
   }
+  // 保險：萬一位置變成 NaN，放回賽道上最後的位置（圈數不變）
+  recover(k){ const m=this.track.sample(Number.isFinite(k.s)?k.s:0); k.pos.set(m.pos.x,0,m.pos.z); k.heading=Math.atan2(m.tan.x,m.tan.z); k.vel.set(0,0,0); k.speed=0; k.y=0; k.vy=0; k.lastI=-1; }
   markFinished(k,t){ if(k.finished) return; k.finished=true; k.finishTime=t; this.order.push(k.idx); this.order.sort((a,b)=>this.karts[a].finishTime-this.karts[b].finishTime); k.events.push('finish'); }
   rank(){
     const fin=this.order.map(i=>this.karts[i]), rest=this.karts.filter(k=>!k.finished).sort((a,b)=>b.progress-a.progress);

@@ -5,8 +5,8 @@ import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
-import {byId,ROSTER} from './roster.js?v=20260927163241';
-import {K} from './kart.js?v=20260927163241';
+import {byId,ROSTER} from './roster.js?v=20260927210901';
+import {K} from './kart.js?v=20260927210901';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -16,7 +16,7 @@ const CLIP={idle:[/^idle1(_base)?(\.|$)/i,/^idle1/i,/^idle/i], hit:[/^knockup/i,
 const findClip=(clips,key)=>{ for(const r of CLIP[key]){ const c=clips.find(c=>r.test(c.name)); if(c) return c; } return null; };
 // 施放技能時播遊戲裡真正的施法動作（Spell1～4）
 const spellClip=(clips,n)=>clips.find(c=>new RegExp('^spell'+n+'(\\.|$|_?a?$)','i').test(c.name))||clips.find(c=>new RegExp('^spell'+n,'i').test(c.name)&&!/toidle|torun|_in/i.test(c.name));
-const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A,beartrap:0xC9A46B,icewall:0xBFE8FF,storm:0x9FD8FF,alpha:0xC8FF6B,charge:0xFF7A3A,slam:0x6FD86B,minion:0xFFE27A,crab:0x5FB8C9,portal:0xFFD86B,fate:0xFFC94A,bubble:0x6FD0FF,wave:0x3FA9F5,fling:0x8BD13F,gale:0xE8F4FF,monsoon:0xBFE6FF};
+const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A,beartrap:0xC9A46B,icewall:0xBFE8FF,storm:0x9FD8FF,alpha:0xC8FF6B,charge:0xFF7A3A,slam:0x6FD86B,minion:0xFFE27A,crab:0x5FB8C9,poro:0xF6F4EE,cannon:0xFF8A2A,portal:0xFFD86B,fate:0xFFC94A,bubble:0x6FD0FF,wave:0x3FA9F5,fling:0x8BD13F,gale:0xE8F4FF,monsoon:0xBFE6FF};
 
 // 有些造型把「回城／表情動作的道具」（狗屋、椰子樹、海浪、拉霸機…）一起放在模型裡，待機動作也看得到，
 // 還會把外框撐得很大 → 角色被縮得很小。這裡把這類網格藏起來，並回傳「只算身體」的外框。
@@ -78,7 +78,7 @@ export class View{
     // 電影感色調（ACES）＋環境反射（讓英雄模型有立體感）；只在開始時算一次，不增加每幀負擔
     r.toneMapping=THREE.ACESFilmicToneMapping; r.toneMappingExposure=1.15;
     { const pm=new THREE.PMREMGenerator(r); s.environment=pm.fromScene(new RoomEnvironment(),.04).texture; pm.dispose(); }
-    s.add(new THREE.HemisphereLight(0xEAF6FF,0x4A6B3A,2.0));
+    s.add(this.hemi=new THREE.HemisphereLight(0xEAF6FF,0x4A6B3A,2.0));
     const sun=this.sun=new THREE.DirectionalLight(0xFFF0D0,3.0); sun.position.set(80,140,40); s.add(sun); s.add(sun.target);
     // 高畫質的即時陰影：只照玩家周圍 90 m，跟著玩家移動
     r.shadowMap.type=THREE.PCFSoftShadowMap; sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-45,right:45,top:45,bottom:-45,near:10,far:400}); sun.shadow.bias=-.0006; sun.shadow.normalBias=.4;
@@ -107,6 +107,14 @@ export class View{
   setup(track,race,me){
     this.root.clear(); this.sparks.clear(); this.puffs.clear(); this.fxm.clear(); this.flashes=[]; this.track=track; this.race=race; this.me=me;
     track.build(this.root,this.q);
+    // 地圖的天色、霧、燈光
+    const Lk=track.look, S=this.scene; S.background.set(Lk.fog[0]); S.fog.color.set(Lk.fog[0]); S.fog.near=Lk.fog[1]; S.fog.far=Lk.fog[2];
+    this.hemi.color.set(Lk.hemi[0]); this.hemi.groundColor.set(Lk.hemi[1]); this.hemi.intensity=Lk.hemi[2];
+    this.sun.color.set(Lk.sun[0]); this.sun.intensity=Lk.sun[1]; this.sunOff=Lk.sun[2]; this.sun.position.set(...this.sunOff);
+    // 下雪（嚎哭深淵）：一團跟著鏡頭的雪花
+    this.snow=null; if(Lk.snow){ const n=this.q==='eco'?500:1200, pos=new Float32Array(n*3); for(let i=0;i<n;i++){ pos[i*3]=(Math.random()-.5)*70; pos[i*3+1]=Math.random()*30; pos[i*3+2]=(Math.random()-.5)*70; }
+      const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+      this.snow=new THREE.Points(g,new THREE.PointsMaterial({map:this.dot,color:0xffffff,size:.35,transparent:true,opacity:.9,depthWrite:false})); this.snow.frustumCulled=false; this.root.add(this.snow); }
     this.riders=race.karts.map(k=>this.makeRider(k));
     const k=race.karts[me]; this.cam.position.copy(k.pos).add(new THREE.Vector3(0,3,-8)); this.camT=0;
   }
@@ -294,7 +302,9 @@ export class View{
     });
     this.syncFx(race,dt,t); this.stepFlashes(dt);
     if(TR.sky) TR.sky.position.copy(this.cam.position);
-    if(this.r.shadowMap.enabled){ const mp=this.riders[this.me].g.position; this.sun.position.set(mp.x+60,mp.y+110,mp.z+30); this.sun.target.position.copy(mp); }
+    if(this.r.shadowMap.enabled){ const mp=this.riders[this.me].g.position; const so=this.sunOff||[60,110,30], k=130/Math.hypot(...so); this.sun.position.set(mp.x+so[0]*k,mp.y+so[1]*k,mp.z+so[2]*k); this.sun.target.position.copy(mp); }
+    if(this.snow){ const P=this.snow.geometry.attributes.position, a=P.array, c=this.cam.position; for(let i=0;i<a.length;i+=3){ a[i+1]-=dt*(2.2+(i%7)*.25); a[i]+=Math.sin(t*.7+i)*dt*.6;
+        if(a[i+1]<0){ a[i+1]+=30; } let dx=a[i]-c.x, dz=a[i+2]-c.z; if(dx>35) a[i]-=70; else if(dx<-35) a[i]+=70; if(dz>35) a[i+2]-=70; else if(dz<-35) a[i+2]+=70; } P.needsUpdate=true; }
     this.sparks.update(dt); this.puffs.update(dt); TR.tick(t); TR.tickFeatures(race.t,me,t);
     // 鏡頭
     const R=this.riders[this.me], p=R.g.position, f=new THREE.Vector3(Math.sin(me.heading),0,Math.cos(me.heading));

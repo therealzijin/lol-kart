@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927163241';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927163241';
-import {Track,TRACK_DEF} from './track.js?v=20260927163241';
-import {Race,DT} from './race.js?v=20260927163241';
-import {View} from './view.js?v=20260927163241';
-import {initInput,pollInput,enableTilt,disableTilt,recenterTilt} from './input.js?v=20260927163241';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927163241';
-import {initAI,driveAI} from './ai.js?v=20260927163241';
-import {KITS,cast} from './skills.js?v=20260927163241';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927210901';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927210901';
+import {Track,TRACK_DEF,TRACKS} from './track.js?v=20260927210901';
+import {Race,DT} from './race.js?v=20260927210901';
+import {View} from './view.js?v=20260927210901';
+import {initInput,pollInput,enableTilt,disableTilt,recenterTilt} from './input.js?v=20260927210901';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927210901';
+import {initAI,driveAI} from './ai.js?v=20260927210901';
+import {KITS,cast} from './skills.js?v=20260927210901';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -47,6 +47,7 @@ function renderKit(){ const c=byId(pick.champ), k=c.kit, sp=spellCache[c.id];
   $('kit').innerHTML=row(null,T('passive'),k.p[lang])+row('q',T('skill'),k.q[lang])+row('r',T('ult'),k.r[lang]); }
 
 /* ---------- 比賽 ---------- */
+let trackId=TRACKS[ls.get('lk-track')]?ls.get('lk-track'):'rift'; const tracks={};   // 每張地圖的 Track 只建一次
 let laps=[3,5,7].includes(+ls.get('lk-laps'))?+ls.get('lk-laps'):3, quality=ls.get('lk-q')||'std', lastDraw=0, rdt=0, hudT=0, miniT=0, view=null, track=null, race=null, me=0, acc=0, lastT=0, raf=0, bannerT=0, mode='solo', running=false, noticeT=0;
 function myName(){ return $('name').value.trim()||T('namePh').replace(/^.*：/,''); }
 function myEntry(){ return {name:myName(),champ:pick.champ,skin:pick.skin||String(byId(pick.champ).key*1000)}; }
@@ -64,7 +65,7 @@ async function startRace(list,opts){
   unlockAudio(); tryLandscape(); cancelAnimationFrame(raf); running=false; stopEngine();
   mode=opts.online?'online':'solo'; me=opts.me||0;
   if(!view){ view=new View($('game')); view.setQuality(quality); }
-  if(!track) track=new Track(TRACK_DEF);
+  const tid=TRACKS[opts.track]?opts.track:trackId; track=tracks[tid]||(tracks[tid]=new Track(TRACKS[tid]));
   show('s-load'); $('load-t').textContent=T('loadModels'); $('load-s').textContent=T('loadHint'); $('load-bar').style.width='0%';
   const urls=[...new Set(list.map(e=>e.url))];
   const res=await view.loadModels(urls,p=>$('load-bar').style.width=Math.round(p*100)+'%');
@@ -193,7 +194,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260927163241';
+import * as Online from './online.js?v=20260927210901';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },
@@ -204,6 +205,7 @@ Online.initOnline({
   toTitle:()=>toTitle(),
   titleError:msg=>{ $('t-err').textContent=msg; },
   getLaps:()=>laps, setLaps:n=>{ laps=n; ls.set('lk-laps',n); markLaps(); },
+  getTrack:()=>trackId, setTrack:id=>{ if(!TRACKS[id]) return; trackId=id; ls.set('lk-track',id); markTrack(); }, trackName:id=>(TRACKS[id]||TRACK_DEF).name[lang],
   resultsLeft:msg=>{ const ag=$('r-again'); if(ag) ag.remove(); const p=document.createElement('p'); p.className='note'; p.style.cssText='color:#B5122A;opacity:1;text-align:center'; p.textContent=msg; $('r-home').before(p); },
 });
 
@@ -216,6 +218,9 @@ document.querySelectorAll('#seg-q button').forEach(x=>x.classList.toggle('sel',x
 function markLaps(){ document.querySelectorAll('#seg-laps button').forEach(x=>x.classList.toggle('sel',+x.dataset.v===laps)); }
 document.querySelectorAll('#seg-laps button').forEach(b=>b.onclick=()=>{ laps=+b.dataset.v; ls.set('lk-laps',laps); markLaps(); });
 markLaps();
+function markTrack(){ document.querySelectorAll('#seg-track button').forEach(x=>x.classList.toggle('sel',x.dataset.v===trackId)); }
+document.querySelectorAll('#seg-track button').forEach(b=>b.onclick=()=>{ trackId=b.dataset.v; ls.set('lk-track',trackId); markTrack(); });
+markTrack();
 // 全螢幕：能用 Fullscreen API 就直接切（Android／電腦）；iPhone 不支援 → 教「加入主畫面」。已經是主畫面 App 模式就不顯示按鈕
 const isApp=matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches||navigator.standalone;
 if(isApp) $('b-fs').style.display='none';
@@ -235,4 +240,4 @@ $('b-solo').onclick=()=>{ $('t-err').textContent=''; startRace(entrantsSolo(),{m
 $('b-online').onclick=()=>{ $('t-err').textContent=''; show('s-online'); Online.openOnline(); };
 initInput(); applyLang(); setVoiceLang(()=>lang); markSteer();
 // 除錯用
-window.__lk={get race(){ return race; }, get view(){ return view; }, Race, Track, TRACK_DEF, initAI, driveAI, cast, auto:false, pick, Online};
+window.__lk={get race(){ return race; }, get view(){ return view; }, Race, Track, TRACK_DEF, TRACKS, initAI, driveAI, cast, auto:false, pick, Online};
