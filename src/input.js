@@ -1,4 +1,4 @@
-// 觸控（左半邊類比搖桿、右下按鈕）＋鍵盤（←→/AD 轉彎、空白鍵甩尾、Q、R）。
+// 觸控（左半邊類比搖桿、右下按鈕）＋鍵盤（←→/AD 轉彎、空白鍵甩尾、Q、R）＋傾斜手機轉向（選項）。
 export const input={steer:0,drift:false,q:false,r:false};
 const keys={};
 let stickId=null, ox=0, oy=0;
@@ -22,9 +22,30 @@ export function initInput(){
 // 每幀呼叫：合併鍵盤
 export function pollInput(){
   const kl=keys.ArrowLeft||keys.KeyA, kr=keys.ArrowRight||keys.KeyD;
-  if(kl||kr) input.steer=(kr?1:0)-(kl?1:0); else if(stickId==null&&input._kb) input.steer=0;
+  if(kl||kr) input.steer=(kr?1:0)-(kl?1:0); else if(tilt.on&&tilt.ok&&stickId==null) input.steer=tilt.steer; else if(stickId==null&&input._kb) input.steer=0;
   input._kb=!!(kl||kr);
   input.driftKey=!!(keys.Space||keys.ShiftLeft||keys.ShiftRight);
   input.qKey=!!keys.KeyQ; input.rKey=!!keys.KeyR;
   return {steer:input.steer, drift:input.drift||input.driftKey, q:input.q||input.qKey, r:input.r||input.rKey};
 }
+
+/* ---------- 傾斜手機轉向 ----------
+   用重力在螢幕平面的方向算「方向盤轉了幾度」，以起跑時的拿法為中心（不用放平）。
+   iPhone 的重力方向跟 Android 相反，但算的是相對角度，正負會自動抵銷。 */
+const tilt={on:false, th0:null, th:0, gx:0, gy:0, steer:0, ok:false};
+const TILT_MAX=25*Math.PI/180, TILT_DEAD=2.5*Math.PI/180;
+function onMotion(e){ const g=e.accelerationIncludingGravity; if(!g||g.x==null) return; tilt.ok=true;
+  tilt.gx+=(g.x-tilt.gx)*.35; tilt.gy+=(g.y-tilt.gy)*.35;                 // 簡單低通，去掉手抖
+  if(Math.hypot(tilt.gx,tilt.gy)<2.5){ tilt.steer=0; return; }              // 手機幾乎平放：量不準就不轉
+  tilt.th=Math.atan2(tilt.gy,tilt.gx); if(tilt.th0==null) tilt.th0=tilt.th;
+  let d=tilt.th-tilt.th0; d=Math.atan2(Math.sin(d),Math.cos(d));
+  const v=Math.max(0,Math.min(1,(Math.abs(d)-TILT_DEAD)/(TILT_MAX-TILT_DEAD))); tilt.steer=Math.sign(d)*Math.pow(v,1.5); }
+// iPhone 要在點擊時請求權限；回傳是否可用
+export async function enableTilt(){
+  try{ if(typeof DeviceMotionEvent!=='undefined'&&DeviceMotionEvent.requestPermission){ const r=await DeviceMotionEvent.requestPermission(); if(r!=='granted') return false; } }catch(e){ return false; }
+  if(!tilt.listening){ addEventListener('devicemotion',onMotion); tilt.listening=true; }
+  tilt.on=true; tilt.th0=null; return true; }
+export function disableTilt(){ tilt.on=false; }
+export function recenterTilt(){ tilt.th0=tilt.ok?tilt.th:null; }                 // 起跑時：目前的拿法＝正中間
+export const tiltOn=()=>tilt.on;
+

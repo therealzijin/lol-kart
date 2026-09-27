@@ -135,7 +135,7 @@ body.racing.portrait #rotate{display:flex}
 <div id="pad">
   <div id="stick"></div>
   <div class="knob" id="knob"><i></i></div>
-  <div class="hint" data-i="steerHint"></div>
+  <div class="hint" id="h-steer" data-i="steerHint"></div>
   <div class="btns">
     <button class="bt" id="b-q">Q<span class="cd"></span></button>
     <button class="bt drift" id="b-drift" data-i="drift"></button>
@@ -164,6 +164,8 @@ body.racing.portrait #rotate{display:flex}
         <div class="skins" id="skins"></div>
         <div class="kit" id="kit"></div>
         <div class="lbl" data-i="laps"></div>
+        <div class="lbl" data-i="steerMode"></div>
+        <div class="seg" id="seg-steer" style="display:inline-flex"><button data-v="touch" data-i="stTouch"></button><button data-v="tilt" data-i="stTilt"></button></div>
         <div class="seg" id="seg-laps" style="display:inline-flex"><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div>
         <div class="lbl" data-i="quality"></div>
         <div class="seg" id="seg-q" style="display:inline-flex"><button data-v="hq" data-i="qHq"></button><button data-v="std" data-i="qStd"></button><button data-v="eco" data-i="qEco"></button></div>
@@ -207,6 +209,6 @@ body.racing.portrait #rotate{display:flex}
 <div id="rotate"><div class="ph"></div><div data-i="rotate"></div></div>
 
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
-<script type="module" src="src/main.js?v=20260927101822"></script>
+<script type="module" src="src/main.js?v=20260927110403"></script>
 </body>
 </html>

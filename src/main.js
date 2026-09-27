@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927101822';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927101822';
-import {Track,TRACK_DEF} from './track.js?v=20260927101822';
-import {Race,DT} from './race.js?v=20260927101822';
-import {View} from './view.js?v=20260927101822';
-import {initInput,pollInput} from './input.js?v=20260927101822';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927101822';
-import {initAI,driveAI} from './ai.js?v=20260927101822';
-import {KITS,cast} from './skills.js?v=20260927101822';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927110403';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927110403';
+import {Track,TRACK_DEF} from './track.js?v=20260927110403';
+import {Race,DT} from './race.js?v=20260927110403';
+import {View} from './view.js?v=20260927110403';
+import {initInput,pollInput,enableTilt,disableTilt,recenterTilt} from './input.js?v=20260927110403';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927110403';
+import {initAI,driveAI} from './ai.js?v=20260927110403';
+import {KITS,cast} from './skills.js?v=20260927110403';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -121,7 +121,7 @@ function flushEvents(hidden){
     if(['boom','fxhit','fizzle','cast'].includes(ev.e)) view.onFx(ev);
     const mine=ev.k===me;
     if(ev.e==='count'){ center(ev.n); sfx.beep(); }
-    else if(ev.e==='go'){ center(T('go')); sfx.go(); setTimeout(()=>center(''),700); }
+    else if(ev.e==='go'){ recenterTilt(); center(T('go')); sfx.go(); setTimeout(()=>center(''),700); }
     else if(mine&&ev.e==='final'){ banner(T('finalLap')); sfx.final(); }
     else if(mine&&ev.e==='lap'&&race.karts[me].lap>1) sfx.lap();
     else if(mine&&ev.e.startsWith('turbo')) sfx.turbo(+ev.e.slice(5));
@@ -193,7 +193,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260927101822';
+import * as Online from './online.js?v=20260927110403';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },
@@ -224,8 +224,15 @@ $('b-fs').onclick=()=>{ const el=document.documentElement;
   if(document.fullscreenEnabled&&el.requestFullscreen) el.requestFullscreen().then(()=>screen.orientation?.lock?.('landscape')).catch(()=>show('s-a2hs'));
   else show('s-a2hs'); };
 $('a2hs-ok').onclick=()=>show('s-title');
+// 操控：左半邊滑動（預設）／傾斜手機。iPhone 要在點擊時才能請求動作感應器權限
+let steerMode=ls.get('lk-steer')==='tilt'?'tilt':'touch';
+function markSteer(){ document.querySelectorAll('#seg-steer button').forEach(x=>x.classList.toggle('sel',x.dataset.v===steerMode)); $('h-steer').textContent=T(steerMode==='tilt'?'steerHintTilt':'steerHint'); }
+async function setSteer(m){ if(m==='tilt'){ const ok=await enableTilt(); if(!ok){ $('t-err').textContent=T('tiltFail'); m='touch'; } } if(m==='touch') disableTilt(); steerMode=m; ls.set('lk-steer',m); markSteer(); }
+document.querySelectorAll('#seg-steer button').forEach(b=>b.onclick=()=>setSteer(b.dataset.v));
+if(steerMode==='tilt') addEventListener('click',()=>setSteer('tilt'),{once:true});   // 上次選傾斜：第一次點畫面時重新請求權限
+onLang(markSteer);
 $('b-solo').onclick=()=>{ $('t-err').textContent=''; startRace(entrantsSolo(),{me:0}); };
 $('b-online').onclick=()=>{ $('t-err').textContent=''; show('s-online'); Online.openOnline(); };
-initInput(); applyLang(); setVoiceLang(()=>lang);
+initInput(); applyLang(); setVoiceLang(()=>lang); markSteer();
 // 除錯用
 window.__lk={get race(){ return race; }, get view(){ return view; }, Race, Track, TRACK_DEF, initAI, driveAI, cast, auto:false, pick, Online};

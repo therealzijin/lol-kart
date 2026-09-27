@@ -5,8 +5,8 @@ import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
-import {byId,ROSTER} from './roster.js?v=20260927101822';
-import {K} from './kart.js?v=20260927101822';
+import {byId,ROSTER} from './roster.js?v=20260927110403';
+import {K} from './kart.js?v=20260927110403';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
