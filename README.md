@@ -1,19 +1,55 @@
 # LOL 峽谷 GP / LOL リフトGP
 
-英雄聯盟角色騎懸浮滑板、在召喚峽谷用技能互相干擾的賽車遊戲（Mario Kart 風格）。手機橫向遊玩，中文／日文。
+英雄聯盟英雄騎懸浮滑板、在召喚峽谷用技能互相干擾的賽車遊戲（Mario Kart 風格）。手機橫向遊玩，中文／日文介面。
+
+**玩：** https://therealzijin.github.io/lol-kart/
+iPhone 建議用 Safari「分享 → 加入主畫面」，從圖示打開就是全螢幕。
+
+## 遊戲內容
+- **12 位英雄**，各有被動、Q、R，都轉譯成賽車用的效果：
+  - **跑法型**：希維爾、圖奇、拉姆斯、克雷德、札克、易大師
+  - **干擾型**：提摩、吉茵珂絲、布里茨、伊澤瑞爾、艾希、艾妮維亞
+- 可選所有造型，模型內附的回城／表情道具會自動隱藏。
+- **賽道機關**：
+  - 河道跳台（空中按甩尾＝特技加速）
+  - 連續加速帶、爆破花、石柱
+  - 小兵、河道蟹、蜂蜜果
+- **圈數** 3／5／7；**畫質** 高畫質（陰影・草叢）／標準／省電。
+- **操控**：左半邊滑動，或傾斜手機（以起跑時的拿法為中心）；右下是甩尾（三段集氣）和 Q／R。
+- **英雄語音**：放技能、被打中時說話（中文介面＝英文原音、日文介面＝日配）。
 
 ## 兩支手機對戰
-一人按「兩支手機對戰 → 開新房間」，另一人輸入 4 位數房號加入。每支手機負責自己的車（房主另外負責電腦），每秒互傳 20 次狀態；技能只傳「誰在哪裡朝哪放」，對方重播；命中由被打的那一方判定。
+一人「開新房間」，另一人輸入 4 位數房號加入（PeerJS，P2P）。
+- **分工**：每支手機負責自己的車，房主另外負責電腦。
+- **狀態同步**：用不排隊的快速通道，每秒 30 次。
+  - 對方的車用「最新狀態＋速度×（經過時間＋單程延遲）」推算現在位置，只平滑修正量，不會顯示過去的位置。
+- **技能**：只傳「誰、在哪、朝哪、目標是誰」，對方用同樣的程式重播，產生同樣 id 的彈道。
+- **命中**：由被打的那一方判定，再通知對方移除彈道、幫施放者充能。
+- **斷線**：比賽中對方斷線，這支手機接手，對方的車改由電腦沿賽道跑完。
 
 ## 開發
 ```
-python3 dev.py        # http://localhost:8766 （關閉快取）
+python3 dev.py        # http://localhost:8766（關閉快取）
+./bump.sh             # 部署前執行：幫所有 module import 加版本號，避免手機混用新舊快取
 ```
-- `src/track.js` 賽道（樣條中心線 → 路面、牆、場景；nearest/sample 給物理與 AI 用）
-- `src/kart.js` 懸浮滑板物理（自動加速、甩尾三段集氣、草地減速、牆、加速板、擊飛）
-- `src/ai.js` 電腦駕駛　`src/race.js` 比賽流程（60Hz 固定步長）
-- `src/view.js` Three.js 畫面、英雄模型、粒子、鏡頭　`src/main.js` 標題／讀取／HUD／結果
-- `src/skills.js` 8 位英雄的 Q／R／被動　`src/net.js` PeerJS 連線　`src/online.js` 兩支手機對戰（大廳、狀態同步、技能重播、斷線接手）
-- 英雄模型：modelviewer.lol（glTF，meshopt + KTX2），資料：Riot Data Dragon
+| 檔案 | 內容 |
+|---|---|
+| `src/track.js` | 賽道：樣條中心線 → 路面、路肩、牆、場景、機關；`nearest()`／`sample()` 給物理與 AI |
+| `src/kart.js` | 懸浮滑板物理：加速、甩尾三段集氣、草地、牆（撞擊一次＋沿牆滑）、跳台特技、擊飛 |
+| `src/race.js` | 比賽流程：60Hz 固定步長、碰撞、小兵／河道蟹、名次、完賽 |
+| `src/skills.js` | 12 位英雄的 Q／R／被動、彈道與範圍效果、電腦施放 |
+| `src/ai.js` | 電腦駕駛：走線、避開障礙、甩尾、橡皮筋 |
+| `src/view.js` | Three.js 畫面：英雄模型、陰影、粒子、技能特效、追尾鏡頭 |
+| `src/main.js` | 標題／讀取／HUD／結果、語音觸發 |
+| `src/input.js` | 滑動搖桿、按鈕、鍵盤、傾斜轉向 |
+| `src/audio.js` | 合成音效、引擎聲、英雄語音 |
+| `src/net.js`、`src/online.js` | PeerJS 連線；大廳、同步、技能重播、斷線接手 |
+| `tools/build_vo.py` | 從 Riot 更新伺服器抽英雄語音（WAD → bnk/wpk → m4a） |
 
-本作為依據 Riot Games「Legal Jibber Jabber」政策製作的非商業粉絲作品，Riot Games 並未背書或贊助。
+## 素材
+- **英雄模型**：[modelviewer.lol](https://modelviewer.lol/)（glTF，meshopt＋KTX2）
+- **英雄資料與圖示**：Riot Data Dragon
+- **英雄語音**：League of Legends 遊戲檔（base skin VO），事件名稱參考 CommunityDragon
+- **材質**：[Poly Haven](https://polyhaven.com/)（CC0），見 `tex/CREDITS.txt`
+
+本作為依據 Riot Games「Legal Jibber Jabber」政策製作的非商業粉絲作品，使用了 Riot Games 擁有的素材，Riot Games 並未背書或贊助。
