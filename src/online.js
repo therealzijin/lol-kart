@@ -1,11 +1,11 @@
 // 兩支手機對戰：大廳、開賽同步、狀態同步（每秒 20 次）、技能重播、斷線處理。
 // 分工：每支手機負責自己的車；房主另外負責電腦。
 // 對方的車：用「最後收到的狀態＋速度×(經過時間＋單程延遲)」推算它現在在哪，再平滑靠過去（不再顯示過去的位置）。
-import {Net} from './net.js?v=20260927091137';
-import {T,lang} from './i18n.js?v=20260927091137';
-import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260927091137';
-import {cast,remoteHit} from './skills.js?v=20260927091137';
-import {initAI} from './ai.js?v=20260927091137';
+import {Net} from './net.js?v=20260927092723';
+import {T,lang} from './i18n.js?v=20260927092723';
+import {ROSTER,byId,modelUrl,circleUrl} from './roster.js?v=20260927092723';
+import {cast,remoteHit} from './skills.js?v=20260927092723';
+import {initAI} from './ai.js?v=20260927092723';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
