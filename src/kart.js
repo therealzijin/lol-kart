@@ -17,7 +17,7 @@ export class Kart{
     this.offroad=false; this.rubber=1; this.lastI=-1; this.s=0; this.lap=0; this.half=true; this.progress=0;
     this.finished=false; this.finishTime=0; this.rank=idx+1; this.events=[];
     this.qCD=0; this.rCharge=15; this.shieldT=0; this.wallT=0; this.immuneT=0; this.steerS=0; this.blindT=0; this.invisT=0; this.pasT=0; this.ballT=0; this.huntT=0; this.lightSlowT=0; this.trailT=0; this.warnT=0;
-    this.chargeT=0; this.yiT=0; this.bounceT=0; this.eggT=0; this.egg=false; this.air=null; this.trick=false; this.prevDrift=false; this.honey={};
+    this.chargeT=0; this.madT=0; this.draftT=0; this.quickT=0; this.yiT=0; this.bounceT=0; this.eggT=0; this.egg=false; this.air=null; this.trick=false; this.prevDrift=false; this.honey={};
   }
   place(track,s,lat){
     const m=track.sample(s); this.pos.set(m.pos.x+m.nrm.x*lat,0,m.pos.z+m.nrm.z*lat);
@@ -34,7 +34,7 @@ export class Kart{
     const block=()=>{ this.events.push('block'); if(this.champ==='Sivir'&&this.blockedBySpell){ this.boost(1.3); this.rCharge=Math.min(100,this.rCharge+20); } this.blockedBySpell=false; return 'block'; };
     if(this.shieldT>0){ this.shieldT=0; this.blockedBySpell=true; return block(); }
     if(this.champ==='Blitzcrank'&&this.pasT<=0){ this.pasT=20; return block(); }       // 被動：魔力屏障
-    const cc=this.champ==='Zac'?.7:1;                  // 札克被動：控制時間縮短
+    const cc=this.champ==='Zac'?.7:this.madT>0?.6:1;   // 札克被動、辛吉德大招：控制時間縮短
     if(eff.knock){ this.vy=Math.max(this.vy,eff.knock); this._spin(Math.max(.9,eff.spin||0)*cc); }
     if(eff.spin) this._spin(eff.spin*cc);
     if(eff.slow&&this.yiT<=0) this.slowT=Math.max(this.slowT,eff.slow*cc);   // 易大師大招：不怕減速／致盲
@@ -43,24 +43,25 @@ export class Kart{
     if(this.champ==='Anivia'&&this.eggT<=0&&(eff.spin||eff.knock||eff.stun)){ this.egg=true; this.eggT=25; }   // 艾妮維亞被動：復原後重生加速
     this.rCharge=Math.min(100,this.rCharge+8);
     const cct=Math.max(this.spinT,this.stunT,this.vy>0?this.vy/12:0); this.immuneT=Math.max(this.immuneT,cct+1.1);
+    this.quickT=5;                                     // 提摩被動：被打中後 5 秒內沒有小跑步加速
     this.events.push('hit'); return true;
   }
 
   update(dt,track,racing){
     const I=this.input, T=track;
-    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD','immuneT','wallT','chargeT','yiT','eggT'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
+    ['boostT','spinT','slowT','stunT','bumpT','hopT','shieldT','blindT','invisT','pasT','ballT','huntT','lightSlowT','trailT','warnT','qCD','immuneT','wallT','chargeT','madT','draftT','quickT','yiT','eggT'].forEach(k=>{ if(this[k]>0) this[k]=Math.max(0,this[k]-dt); });
     const control=racing&&!this.finished&&this.spinT<=0&&this.stunT<=0;   // 空中（跳台、札克）也能轉向；被擊飛時一定在打轉，所以不能操作
     if(this.egg&&control){ this.egg=false; this.boost(1.2); this.events.push('egg'); }
     // 目標速度
     let max=K.MAX*this.rubber;
     if(this.boostT>0) max*=K.BOOST; else if(this.offroad) max*=this.champ==='Teemo'?.9:K.OFFROAD;   // 提摩被動：草地不減速
-    if(this.ballT>0) max*=1.22; if(this.huntT>0) max*=1.12; if(this.chargeT>0) max*=1.12; if(this.yiT>0) max*=1.15;
+    if(this.ballT>0) max*=1.22; if(this.huntT>0) max*=1.12; if(this.chargeT>0) max*=1.12; if(this.yiT>0) max*=1.1; if(this.madT>0) max*=1.14; if(this.draftT>0) max*=1.1; if(this.champ==='Teemo'&&this.quickT<=0) max*=1.04; if(this.champ==='Janna') max*=1.03;   // 辛吉德：大招／尾流；珍娜被動：順風
     if(this.slowT>0) max*=.6; else if(this.lightSlowT>0) max*=.9;
     if(!racing) max=0;
     if(this.finished) max*=.55;
     if(this.spinT>0) this.speed*=Math.exp(-2.4*dt);
     else if(this.stunT>0) this.speed*=Math.exp(-4*dt);
-    else if(this.speed<max) this.speed=Math.min(max,this.speed+(this.boostT>0?K.ACC*2.2:K.ACC)*(this.champ==='Kled'?1.3:1)*dt*(1-this.speed/(max*1.15+.01)*.5));
+    else if(this.speed<max) this.speed=Math.min(max,this.speed+(this.boostT>0?K.ACC*2.2:K.ACC)*(this.champ==='Kled'?1.2:1)*dt*(1-this.speed/(max*1.15+.01)*.5));
     else this.speed=Math.max(max,this.speed-(this.offroad?16:14)*dt);   // 草地減速放緩：原本 30 會瞬間掉速，同樣的方向盤突然轉得很急
     // 轉向與甩尾
     // 玩家的方向輸入稍微平滑，避免手指一抖就猛轉
@@ -120,9 +121,10 @@ export class Kart{
     // 加速板
     const near=(o,len,w)=>{ let ds=q.s-o.s; if(ds>T.L/2) ds-=T.L; if(ds<-T.L/2) ds+=T.L; return Math.abs(ds)<len/2&&Math.abs(q.lat-o.lat)<w/2; };
     if(this.y<.3){
-      for(const pd of T.pads) if(near(pd,pd.len,pd.w)&&this.boostT<.9) this.boost(1.1);
+      const bard=this.champ==='Bard'?1.5:1;               // 巴德被動：加速帶、跳台的加速時間 +50%
+      for(const pd of T.pads) if(near(pd,pd.len,pd.w)&&this.boostT<.9*bard) this.boost(1.1*bard);
       // 跳台：往上飛，空中可以做特技
-      for(const rp of T.ramps) if(near(rp,rp.len,rp.w)&&this.vy<=0&&this.speed>8){ this.vy=rp.vy; this.y=.31; this.air='ramp'; this.events.push('jump'); if(rp.boost&&this.boostT<.6) this.boost(rp.boost); }
+      for(const rp of T.ramps) if(near(rp,rp.len,rp.w)&&this.vy<=0&&this.speed>8){ this.vy=rp.vy; this.y=.31; this.air='ramp'; this.events.push('jump'); if(rp.boost&&this.boostT<.6*bard) this.boost(rp.boost*bard); }
     }
     if(this.y<.8){
       // 石柱：撞到就彈開、掉速

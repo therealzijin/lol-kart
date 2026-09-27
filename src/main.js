@@ -1,13 +1,13 @@
 // 進入點：標題畫面（選英雄與造型）→ 讀取 → 比賽 → 結果。
-import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927113210';
-import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927113210';
-import {Track,TRACK_DEF} from './track.js?v=20260927113210';
-import {Race,DT} from './race.js?v=20260927113210';
-import {View} from './view.js?v=20260927113210';
-import {initInput,pollInput,enableTilt,disableTilt,recenterTilt} from './input.js?v=20260927113210';
-import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927113210';
-import {initAI,driveAI} from './ai.js?v=20260927113210';
-import {KITS,cast} from './skills.js?v=20260927113210';
+import {T,lang,applyLang,setLang,onLang} from './i18n.js?v=20260927163241';
+import {ROSTER,byId,modelUrl,circleUrl,DD} from './roster.js?v=20260927163241';
+import {Track,TRACK_DEF} from './track.js?v=20260927163241';
+import {Race,DT} from './race.js?v=20260927163241';
+import {View} from './view.js?v=20260927163241';
+import {initInput,pollInput,enableTilt,disableTilt,recenterTilt} from './input.js?v=20260927163241';
+import {sfx,engine,stopEngine,unlockAudio,suspendAudio,voice,preloadVoices,setVoiceLang} from './audio.js?v=20260927163241';
+import {initAI,driveAI} from './ai.js?v=20260927163241';
+import {KITS,cast} from './skills.js?v=20260927163241';
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -118,7 +118,7 @@ function flushEvents(hidden){
     if(!hidden) voiceEvent(ev);
     if(hidden){ if(ev.e==='done') setTimeout(showResults,1600); continue; }
     if(ev.k>=0&&typeof ev.e==='string') view.onEvent(ev.k,ev.e);
-    if(['boom','fxhit','fizzle','cast'].includes(ev.e)) view.onFx(ev);
+    if(['boom','fxhit','fizzle','cast','warp'].includes(ev.e)) view.onFx(ev);
     const mine=ev.k===me;
     if(ev.e==='count'){ center(ev.n); sfx.beep(); }
     else if(ev.e==='go'){ recenterTilt(); center(T('go')); sfx.go(); setTimeout(()=>center(''),700); }
@@ -193,7 +193,7 @@ const orient=()=>document.body.classList.toggle('portrait',innerHeight>innerWidt
 addEventListener('resize',orient); orient();
 
 /* ---------- 連線對戰 ---------- */
-import * as Online from './online.js?v=20260927113210';
+import * as Online from './online.js?v=20260927163241';
 const netTick=r=>Online.tick(r);
 Online.initOnline({
   myEntry:()=>{ ls.set('lk-name',$('name').value.trim()); return myEntry(); },

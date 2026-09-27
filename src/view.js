@@ -5,8 +5,8 @@ import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
-import {byId,ROSTER} from './roster.js?v=20260927113210';
-import {K} from './kart.js?v=20260927113210';
+import {byId,ROSTER} from './roster.js?v=20260927163241';
+import {K} from './kart.js?v=20260927163241';
 
 const BASIS='https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/';
 const HOVER=.42, RIDER_H=1.45;
@@ -16,7 +16,7 @@ const CLIP={idle:[/^idle1(_base)?(\.|$)/i,/^idle1/i,/^idle/i], hit:[/^knockup/i,
 const findClip=(clips,key)=>{ for(const r of CLIP[key]){ const c=clips.find(c=>r.test(c.name)); if(c) return c; } return null; };
 // 施放技能時播遊戲裡真正的施法動作（Spell1～4）
 const spellClip=(clips,n)=>clips.find(c=>new RegExp('^spell'+n+'(\\.|$|_?a?$)','i').test(c.name))||clips.find(c=>new RegExp('^spell'+n,'i').test(c.name)&&!/toidle|torun|_in/i.test(c.name));
-const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A,beartrap:0xC9A46B,icewall:0xBFE8FF,storm:0x9FD8FF,alpha:0xC8FF6B,charge:0xFF7A3A,slam:0x6FD86B,minion:0xFFE27A,crab:0x5FB8C9};
+const FX_COL={dart:0x8BE04E,zap:0x5CE1FF,hook:0xF2C14E,mystic:0xFFD86B,trueshot:0xFFD86B,arrow:0xCFEFFF,crystal:0x8FD3FF,rocket:0xFF8A2A,shroom:0xE5484D,poison:0x6BD13F,tremor:0xC99A5B,ball:0xC99A5B,static:0x7FD4FF,boom:0xFF8A2A,beartrap:0xC9A46B,icewall:0xBFE8FF,storm:0x9FD8FF,alpha:0xC8FF6B,charge:0xFF7A3A,slam:0x6FD86B,minion:0xFFE27A,crab:0x5FB8C9,portal:0xFFD86B,fate:0xFFC94A,bubble:0x6FD0FF,wave:0x3FA9F5,fling:0x8BD13F,gale:0xE8F4FF,monsoon:0xBFE6FF};
 
 // 有些造型把「回城／表情動作的道具」（狗屋、椰子樹、海浪、拉霸機…）一起放在模型裡，待機動作也看得到，
 // 還會把外框撐得很大 → 角色被縮得很小。這裡把這類網格藏起來，並回傳「只算身體」的外框。
@@ -178,6 +178,7 @@ export class View{
     if(k.stunT>0&&Math.random()<.5){ const a=R.t*9; this.sparks.emit(new THREE.Vector3(p.x+Math.cos(a)*.6,p.y+1.9,p.z+Math.sin(a)*.6),new THREE.Vector3(0,.3,0),0xFFE27A,.35,0); }
     if(k.slowT>0&&Math.random()<.4) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1.2,p.y+.2,p.z+(Math.random()-.5)*1.2),new THREE.Vector3(0,1.2,0),0x9FB8FF,.5,0);
     if(k.chargeT>0&&Math.random()<.8) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1.4,p.y+.3+Math.random()*1.4,p.z+(Math.random()-.5)*1.4),new THREE.Vector3(0,.8,0),Math.random()<.5?0xFF7A3A:0xFFD24A,.35,0);
+    if(k.madT>0&&Math.random()<.6) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1.2,p.y+.4+Math.random()*1.2,p.z+(Math.random()-.5)*1.2),new THREE.Vector3(0,1.2,0),Math.random()<.5?0x2FB86A:0xC8FF6B,.4,0);
     if(k.yiT>0&&Math.random()<.5) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*1,p.y+.4+Math.random()*1.4,p.z+(Math.random()-.5)*1),new THREE.Vector3(0,1.4,0),0xC8FF6B,.45,0);
     if(R.flipT>0){ R.flipT=Math.max(0,R.flipT-dt); R.tilt.rotation.x=-(1-R.flipT/.45)*Math.PI*2; }
     if(k.lightSlowT>0&&Math.random()<.3) this.sparks.emit(new THREE.Vector3(p.x,p.y+1.2,p.z),new THREE.Vector3((Math.random()-.5),.5,(Math.random()-.5)),0x6BD13F,.5,2);
@@ -209,25 +210,39 @@ export class View{
     else if(o.kind==='storm'){ const d=new THREE.Mesh(new THREE.RingGeometry(o.r-1,o.r,32),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); d.rotation.x=-Math.PI/2; d.position.y=.12; g.add(d); M.disc=d; }
     else if(o.kind==='alpha'){ glow(3,c); }
     else if(o.kind==='tremor'){ const d=new THREE.Mesh(new THREE.RingGeometry(o.r-.8,o.r,32),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); d.rotation.x=-Math.PI/2; d.position.y=.1; g.add(d); M.disc=d; }
+    else if(o.kind==='portal'){ const mk=(x,z,h)=>{ const r=new THREE.Group(), ring=new THREE.Mesh(new THREE.TorusGeometry(1.7,.16,8,28),em(c,{emissiveIntensity:1.6})); ring.position.y=1.8; r.add(ring);
+        const face=new THREE.Mesh(new THREE.CircleGeometry(1.6,28),new THREE.MeshBasicMaterial({color:0xFFF2C0,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); face.position.y=1.8; r.add(face);
+        r.position.set(x,0,z); r.rotation.y=h; return r; };
+      const a=mk(0,0,o.h||0); g.add(a); M.exit=mk(o.ex,.05,o.h||0); M.exit.position.set(o.ex,.05,o.ez); this.root.add(M.exit); M.grow=true; }
+    else if(o.kind==='fate'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(.55,16,12),em(c))); const rg=new THREE.Mesh(new THREE.TorusGeometry(.95,.07,6,24),em(0xFFFFFF)); g.add(rg); M.spin=rg; glow(3.5,c); }
+    else if(o.kind==='bubble'){ g.add(new THREE.Mesh(new THREE.SphereGeometry(.8,18,14),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.5,transparent:true,opacity:.55,roughness:.1}))); glow(2,c); }
+    else if(o.kind==='wave'){ const w=new THREE.Mesh(new THREE.CylinderGeometry(4,4,1.8,24,1,true,-Math.PI/2,Math.PI),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.4,transparent:true,opacity:.6,side:THREE.DoubleSide,roughness:.2}));
+      w.scale.set(1,1,.35); w.position.y=.3; g.add(w); const crest=new THREE.Mesh(new THREE.TorusGeometry(4,.18,6,24,Math.PI),new THREE.MeshBasicMaterial({color:0xFFFFFF,transparent:true,opacity:.8})); crest.rotation.set(-Math.PI/2,0,Math.PI); crest.scale.set(1,.35,1); crest.position.y=1.2; g.add(crest); }
+    else if(o.kind==='fling'){ glow(2.6,c); }
+    else if(o.kind==='gale'){ const m=new THREE.Mesh(new THREE.CylinderGeometry(1.3,.25,3,18,4,true),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.4,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); m.position.y=1.5; g.add(m); M.twist=m; }
     return M;
   }
   syncFx(race,dt,t){
     const alive=new Set();
     for(const o of race.fx){
       alive.add(o.id); let M=this.fxm.get(o.id); if(!M){ M=this.makeFx(o); this.fxm.set(o.id,M); this.root.add(M.g); }
-      M.g.position.set(o.x,o.kind==='shroom'||o.kind==='poison'||o.kind==='tremor'||o.kind==='storm'||o.kind==='icewall'?.05:(o.y||1),o.z);
+      M.g.position.set(o.x,o.kind==='shroom'||o.kind==='poison'||o.kind==='tremor'||o.kind==='storm'||o.kind==='icewall'||o.kind==='portal'?.05:(o.y||1),o.z);
       if(o.dx!=null&&o.mode!=='static') M.g.rotation.y=Math.atan2(o.dx,o.dz);
       const c=FX_COL[o.kind], p=M.g.position;
       if(M.spin&&o.kind==='crystal') M.spin.rotation.z+=dt*8;
+      if(M.spin&&o.kind==='fate'){ M.spin.rotation.x+=dt*5; M.spin.rotation.y+=dt*3; }
+      if(M.twist){ M.twist.rotation.y+=dt*14; if(Math.random()<.6) this.puffs.emit(new THREE.Vector3(p.x+(Math.random()-.5)*2,.3,p.z+(Math.random()-.5)*2),new THREE.Vector3(0,2.5,0),0xD8E4EC,.5,0); }
+      if(o.kind==='wave'&&Math.random()<.9) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*7,1.2,p.z+(Math.random()-.5)*2),new THREE.Vector3(o.dx*4,2,o.dz*4),Math.random()<.5?0xFFFFFF:c,.5,6);
+      if(M.exit){ M.exit.scale.copy(M.g.scale); M.exit.children[0].rotation.z+=dt*3; M.g.children[0].children[0].rotation.z+=dt*3; }
       if(o.kind==='shroom'){ const armed=!o.arm||o.age>=o.arm; M.g.scale.setScalar(armed?1+.05*Math.sin(t*4+o.id):Math.min(1,o.age/o.arm)); }
       if(o.kind==='poison'){ M.disc.material.opacity=.32*Math.min(1,(o.life-o.age)/1.2); if(Math.random()<.25) this.sparks.emit(new THREE.Vector3(p.x+(Math.random()-.5)*o.r,p.y+.2,p.z+(Math.random()-.5)*o.r),new THREE.Vector3(0,1,0),c,.9,0); }
       if(M.grow){ M.g.scale.set(1,Math.min(1,o.age/.25)*Math.min(1,(o.life-o.age)/.4),1); }
       if(o.kind==='storm'){ M.disc.rotation.z+=dt*2; if(Math.random()<.8){ const a=Math.random()*6.28, d=Math.random()*o.r; this.sparks.emit(new THREE.Vector3(p.x+Math.cos(a)*d,.5+Math.random()*3,p.z+Math.sin(a)*d),new THREE.Vector3(Math.sin(a)*3,-1.5,-Math.cos(a)*3),Math.random()<.5?0xFFFFFF:c,.7,0); } }
       if(o.kind==='tremor'){ M.disc.scale.setScalar(.85+.15*Math.sin(t*10)); if(Math.random()<.5){ const a=Math.random()*6.28; this.puffs.emit(new THREE.Vector3(p.x+Math.cos(a)*o.r*.9,.3,p.z+Math.sin(a)*o.r*.9),new THREE.Vector3(0,1.5,0),0x7A5A36,.5,0); } }
-      if(o.mode!=='static'&&o.mode!=='follow'&&o.mode!=='followT'&&c){ const n=o.kind==='trueshot'||o.kind==='rocket'||o.kind==='crystal'?3:1; for(let i=0;i<n;i++) this.sparks.emit(p.clone().add(new THREE.Vector3((Math.random()-.5)*.3,(Math.random()-.5)*.3,(Math.random()-.5)*.3)),new THREE.Vector3(-o.dx*3,.4,-o.dz*3),o.kind==='rocket'&&Math.random()<.5?0xFFD24A:c,.35,0); }
+      if(o.mode!=='static'&&o.mode!=='follow'&&o.mode!=='followT'&&c&&o.kind!=='gale'&&o.kind!=='wave'){ const n=o.kind==='trueshot'||o.kind==='rocket'||o.kind==='crystal'?3:1; for(let i=0;i<n;i++) this.sparks.emit(p.clone().add(new THREE.Vector3((Math.random()-.5)*.3,(Math.random()-.5)*.3,(Math.random()-.5)*.3)),new THREE.Vector3(-o.dx*3,.4,-o.dz*3),o.kind==='rocket'&&Math.random()<.5?0xFFD24A:c,.35,0); }
       if(M.chain){ const b=this.riders[o.owner].g.position, a=new THREE.Vector3(b.x,b.y+.9,b.z), d=p.clone().sub(a), L=d.length(); M.chain.position.copy(a).addScaledVector(d,.5); M.chain.scale.set(1,L,1); M.chain.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); }
     }
-    for(const [id,M] of this.fxm) if(!alive.has(id)){ this.root.remove(M.g); if(M.chain) this.root.remove(M.chain); this.fxm.delete(id); }
+    for(const [id,M] of this.fxm) if(!alive.has(id)){ this.root.remove(M.g); if(M.chain) this.root.remove(M.chain); if(M.exit) this.root.remove(M.exit); this.fxm.delete(id); }
   }
   flash(x,z,r,col,y){ const m=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false})); m.position.set(x,y||1,z); this.root.add(m); this.flashes.push({m,t:0,dur:.45,r}); }
   ring(x,z,r,col){ const m=new THREE.Mesh(new THREE.RingGeometry(.8,1,40),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide})); m.rotation.x=-Math.PI/2; m.position.set(x,.4,z); this.root.add(m); this.flashes.push({m,t:0,dur:.5,r}); }
@@ -235,10 +250,11 @@ export class View{
   // 技能相關事件
   onFx(ev){
     if(ev.e==='boom'){ const col=FX_COL[ev.kind]||0xFF8A2A;
-      if(ev.kind==='static'||ev.kind==='slam'){ this.ring(ev.x,ev.z,ev.r,col); this.ring(ev.x,ev.z,ev.r*.6,0xFFFFFF); for(let n=0;n<40;n++){ const a=Math.random()*6.28, d=Math.random()*ev.r; this.sparks.emit(new THREE.Vector3(ev.x+Math.cos(a)*d,.3+Math.random()*2,ev.z+Math.sin(a)*d),new THREE.Vector3(0,3,0),col,.4,0); } }
+      if(ev.kind==='static'||ev.kind==='slam'||ev.kind==='monsoon'||ev.kind==='fate'){ this.ring(ev.x,ev.z,ev.r,col); this.ring(ev.x,ev.z,ev.r*.6,0xFFFFFF); for(let n=0;n<40;n++){ const a=Math.random()*6.28, d=Math.random()*ev.r; this.sparks.emit(new THREE.Vector3(ev.x+Math.cos(a)*d,.3+Math.random()*2,ev.z+Math.sin(a)*d),new THREE.Vector3(0,3,0),col,.4,0); } }
       else { this.flash(ev.x,ev.z,ev.r*.8,col,1); for(let n=0;n<40;n++){ const v=new THREE.Vector3(Math.random()-.5,Math.random()*.8,Math.random()-.5).normalize().multiplyScalar(4+Math.random()*6); this.sparks.emit(new THREE.Vector3(ev.x,1,ev.z),v,Math.random()<.5?col:0xFFFFFF,.6,6); } }
     }
     else if(ev.e==='fxhit'){ const col=ev.blocked?0xFFD86B:(FX_COL[ev.kind]||0xffffff); this.flash(ev.x,ev.z,ev.blocked?2:1.4,col,1); for(let n=0;n<18;n++){ const v=new THREE.Vector3(Math.random()-.5,Math.random(),Math.random()-.5).normalize().multiplyScalar(5); this.sparks.emit(new THREE.Vector3(ev.x,1,ev.z),v,col,.45,5); } }
+    else if(ev.e==='warp'){ this.flash(ev.x,ev.z,2.2,FX_COL.portal,1.2); for(let n=0;n<24;n++){ const v=new THREE.Vector3(Math.random()-.5,Math.random(),Math.random()-.5).normalize().multiplyScalar(4); this.sparks.emit(new THREE.Vector3(ev.x,1.2,ev.z),v,Math.random()<.5?0xFFFFFF:FX_COL.portal,.5,3); } }
     else if(ev.e==='fizzle'){ for(let n=0;n<6;n++) this.puffs.emit(new THREE.Vector3(ev.x,1,ev.z),new THREE.Vector3((Math.random()-.5)*2,1,(Math.random()-.5)*2),0x55504A,.4,0); }
     else if(ev.e==='cast'){ const R=this.riders[ev.k]; if(R){ R.castT=.8; R.castSlot=ev.slot; } }
   }

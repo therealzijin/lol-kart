@@ -1,4 +1,4 @@
-# 賽車用英雄語音：從 Riot 更新伺服器抽 12 位英雄的基本造型語音（英文／日配）→ voice/{en|ja}/{英雄}/{類別}{n}.m4a
+# 賽車用英雄語音：從 Riot 更新伺服器抽英雄的基本造型語音（英文／日配）→ voice/{en|ja}/{英雄}/{類別}{n}.m4a
 # 需要：tools/vo.py、vgmstream-cli、afconvert（macOS）、python 套件 cdtb zstandard xxhash requests
 import sys, os, re, json, random, subprocess, tempfile
 sys.path.insert(0,os.path.dirname(__file__)); from vo import *
@@ -8,7 +8,9 @@ CATS=[('move',r'Move2D(?!First)',5),('first',r'Move2DFirst',2),('attack',r'Attac
 # 賽車的 Q / R 對應到遊戲裡哪個技能的施放台詞（沒有就用攻擊台詞代替）
 SPELL={'Teemo':('TeemoQ_cast','TeemoR_cast'),'Jinx':('JinxW_cast','JinxR_cast'),'Blitzcrank':(None,None),'Ezreal':('EzrealQ_cast','EzrealR_cast'),
  'Twitch':('TwitchHideInShadows_cast','TwitchVenomCask_cast'),'Sivir':('Spell3DEHit',None),'Rammus':(None,None),'Ashe':('Volley_cast3D$','EnchantedCrystalArrow_cast'),
- 'Kled':('KledQMissile_hit','KledR_cast'),'Anivia':(None,None),'MasterYi':('AlphaStrike_cast','Highlander_cast'),'Zac':('ZacE_cast','ZacR_cast')}
+ 'Kled':('KledQMissile_hit','KledR_cast'),'Anivia':(None,None),'MasterYi':('AlphaStrike_cast','Highlander_cast'),'Zac':('ZacE_cast','ZacR_cast'),
+ 'Bard':(r'BardW\w*_cast',None),'Nami':('NamiQ_cast','NamiR_cast'),'Singed':('Fling_cast',None),'Janna':(None,None)}
+# 用法：python build_vo.py [英雄 …]（不指定＝全部）；只重做指定的英雄，其他英雄的 index 保留
 def conv(wem,dst):
     with tempfile.TemporaryDirectory() as td:
         open(f'{td}/a.wem','wb').write(wem)
@@ -16,8 +18,10 @@ def conv(wem,dst):
         info=subprocess.run(['afinfo',f'{td}/a.wav'],capture_output=True,text=True).stdout; m=re.search(r'estimated duration: ([\d.]+)',info)
         subprocess.run(['afconvert','-f','m4af','-d','aac','-c','1','-b','24000',f'{td}/a.wav',dst],check=True,capture_output=True); return float(m.group(1)) if m else 0
 MF={k.lower():v for k,v in manifest().items()}
-out={'en':{},'ja':{}}
+only=sys.argv[1:] or list(SPELL)
+out={L:(json.load(open(f'{OUT}/{L}/index.json')) if os.path.exists(f'{OUT}/{L}/index.json') else {}) for L in LANGS}
 for cid,(qx,rx) in SPELL.items():
+    if cid not in only: continue
     d=S.get(f'https://raw.communitydragon.org/latest/game/data/characters/{cid.lower()}/skins/skin0.bin.json').json()
     root=next(v for k,v in d.items() if k.lower().endswith('skins/skin0'))
     units=[bu for bu in root['skinAudioProperties']['bankUnits'] if any('/vo/' in p.lower() for p in bu['bankPath'])]
