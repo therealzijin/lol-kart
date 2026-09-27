@@ -9,11 +9,11 @@
 <style>
 :root{--ink:#1B1A22;--paper:#FFF4DE;--gold:#F2C14E;--blue:#3C8CE7;--red:#E5484D;--panel:rgba(12,18,28,.72);--line:rgba(255,255,255,.14)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-html,body{height:100%;overflow:hidden;background:#0B1320;color:var(--paper);font-family:-apple-system,"PingFang TC","Hiragino Sans","Noto Sans TC","Microsoft JhengHei",sans-serif}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;background:#0B1320;color:var(--paper);font-family:-apple-system,"PingFang TC","Hiragino Sans","Noto Sans TC","Microsoft JhengHei",sans-serif}
 button{font:inherit;border:0;cursor:pointer;color:inherit;background:none}
 #game{position:fixed;inset:0}
 #game canvas{display:block;width:100%;height:100%;touch-action:none}
-.screen{position:fixed;inset:0;display:none;z-index:20}
+.screen{position:fixed;inset:0;display:none;z-index:20;overscroll-behavior:contain}
 .screen.on{display:flex}
 /* ---------- 標題 / 選角 ---------- */
 #s-title{flex-direction:column;align-items:center;overflow-y:auto;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 18px max(16px,env(safe-area-inset-left));background:radial-gradient(ellipse at 50% 0%,#1E3A5C 0,#0B1320 70%)}
@@ -193,6 +193,6 @@ body.racing.portrait #rotate{display:flex}
 <div id="rotate"><div class="ph"></div><div data-i="rotate"></div></div>
 
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
-<script type="module" src="src/main.js?v=20260926230010"></script>
+<script type="module" src="src/main.js?v=20260927091137"></script>
 </body>
 </html>
